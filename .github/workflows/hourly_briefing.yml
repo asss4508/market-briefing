@@ -9,15 +9,15 @@ jobs:
   briefing:
     runs-on: ubuntu-latest
     steps:
-      - name: 코드 체크아웃
+      - name: checkout
         uses: actions/checkout@v4
-      - name: Python 설치
+      - name: python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: 패키지 설치
+      - name: install
         run: pip install -r requirements.txt
-      - name: 브리핑 전송
+      - name: run
         env:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
