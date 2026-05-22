@@ -1,4 +1,5 @@
 import asyncio
+import html
 import os
 from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient
@@ -94,9 +95,9 @@ def build_message(top3):
     lines = [f"📊 시장 핵심 브리핑 | {now.strftime('%m/%d %H:%M')}", "─" * 22]
 
     for i, msg in enumerate(top3):
-        summary = msg["text"][:200].replace("\n", " ")
+        summary = html.escape(msg["text"][:200].replace("\n", " "))
         lines.append(
-            f"{medals[i]} <b>[{msg['channel']}]</b>\n"
+            f"{medals[i]} <b>[{html.escape(msg['channel'])}]</b>\n"
             f"{summary}\n"
             f"👁 {msg['views']:,}  |  <a href=\"{msg['link']}\">원문 보기</a>"
         )
