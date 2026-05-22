@@ -24,6 +24,7 @@ CHANNELS = [
 ]
 
 KST = timezone(timedelta(hours=9))
+MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
 
 
 def is_market_hours():
@@ -31,20 +32,8 @@ def is_market_hours():
     return 9 <= now.hour <= 19
 
 
-def process_text(text):
-    # 전화번호 제거 (☎️, 📞 포함)
+def clean_text(text):
     text = re.sub(r'[☎️📞]?\s*(?:\+82[-.]?)?\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', '', text)
-    # **text** → HTML bold 변환 (내용은 나중에 이스케이프)
-    parts = re.split(r'\*\*', text)
-    result = []
-    for i, part in enumerate(parts):
-        escaped = html.escape(part)
-        if i % 2 == 1:
-            result.append(f'<b>{escaped}</b>')
-        else:
-            result.append(escaped)
-    text = ''.join(result)
-    # 연속 공백/줄바꿈 정리
     text = re.sub(r'\n{3,}', '\n\n', text)
     text = re.sub(r'  +', ' ', text)
     return text.strip()
@@ -70,7 +59,7 @@ async def collect_messages():
                     continue
                 all_messages.append({
                     "channel": channel,
-                    "text": msg.text[:500],
+                    "text": msg.text[:600],
                     "views": msg.views or 0,
                     "date": msg_time,
                     "link": f"https://t.me/{channel}/{msg.id}"
@@ -91,16 +80,29 @@ def rank_with_claude(messages):
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=300,
+        max_tokens=1500,
         messages=[{
             "role": "user",
             "content": f"""아래는 한국 주식/경제 텔레그램 채널의 최근 1시간 메시지입니다.
-국내 주식시장에 실질적 영향을 줄 수 있는 내용과 조회수가 높은 것 기준으로 중요한 3개를 선택하고,
-전체 메시지에서 핵심 키워드 3~5개도 뽑아주세요.
+국내 주식시장에 실질적 영향을 줄 수 있는 내용과 조회수가 높은 것 기준으로 중요한 5개를 선택하세요.
+각 항목에 대해 제목, 핵심 키워드(2~3개), 4~5줄 요약 내용을 작성하세요.
+전화번호, URL은 제외하고, **텍스트**는 그대로 활용하세요.
 
 반드시 아래 형식으로만 답하세요:
-번호: 3,7,12
-키워드: 조선, 암모니아, KOSPI200
+전체키워드: 조선, 암모니아, KOSPI200
+
+[1]
+원본번호: 3
+제목: HD한국조선해양 암모니아 운반선 수주
+키워드: 조선, 수주, 암모니아
+내용: HD한국조선해양이 유럽 선주와 초대형 암모니아 운반선 6척 계약을 체결했습니다.
+수주 금액은 약 1조782억원 규모입니다.
+친환경 연료 수요 증가에 따라 VLAC 시장이 본격 확대되고 있습니다.
+한화오션도 유사한 수주를 확대하며 국내 조선사들의 수혜가 예상됩니다.
+
+[2]
+원본번호: 7
+...
 
 {messages_text}"""
         }]
@@ -108,48 +110,73 @@ def rank_with_claude(messages):
 
     raw = response.content[0].text.strip()
 
-    # 번호 파싱
-    indices = []
-    num_match = re.search(r'번호\s*:\s*([\d,\s]+)', raw)
-    if num_match:
-        for x in num_match.group(1).split(","):
-            x = x.strip()
-            if x.isdigit():
-                idx = int(x) - 1
-                if 0 <= idx < len(messages):
-                    indices.append(idx)
-
-    # 키워드 파싱
-    keywords = ""
-    kw_match = re.search(r'키워드\s*:\s*(.+)', raw)
+    # 전체 키워드 파싱
+    global_keywords = ""
+    kw_match = re.search(r'전체키워드\s*:\s*(.+)', raw)
     if kw_match:
-        keywords = kw_match.group(1).strip()
+        global_keywords = kw_match.group(1).strip()
 
-    top3 = [messages[i] for i in indices[:3]]
-    return top3, keywords
+    # 각 항목 파싱
+    items = []
+    blocks = re.split(r'\[(\d+)\]', raw)
+    for j in range(1, len(blocks), 2):
+        block = blocks[j + 1] if j + 1 < len(blocks) else ""
+
+        orig_match = re.search(r'원본번호\s*:\s*(\d+)', block)
+        title_match = re.search(r'제목\s*:\s*(.+)', block)
+        item_kw_match = re.search(r'키워드\s*:\s*(.+)', block)
+        content_match = re.search(r'내용\s*:\s*([\s\S]+?)(?=\n\[|\Z)', block)
+
+        if not orig_match:
+            continue
+
+        orig_idx = int(orig_match.group(1)) - 1
+        if not (0 <= orig_idx < len(messages)):
+            continue
+
+        items.append({
+            "msg": messages[orig_idx],
+            "title": title_match.group(1).strip() if title_match else "",
+            "keywords": item_kw_match.group(1).strip() if item_kw_match else "",
+            "summary": content_match.group(1).strip() if content_match else "",
+        })
+
+    return items[:5], global_keywords
 
 
-def build_message(top3, keywords):
+def escape_bold(text):
+    parts = re.split(r'\*\*', text)
+    result = []
+    for i, part in enumerate(parts):
+        escaped = html.escape(part)
+        result.append(f'<b>{escaped}</b>' if i % 2 == 1 else escaped)
+    return ''.join(result)
+
+
+def build_message(items, global_keywords):
     now = datetime.now(KST)
-    medals = ["🥇", "🥈", "🥉"]
 
-    lines = [
-        f"📊 <b>시장 핵심 브리핑</b>  {now.strftime('%m/%d %H:%M')}",
-    ]
+    lines = [f"📊 <b>시장 핵심 브리핑</b>  {now.strftime('%m/%d %H:%M')}"]
 
-    if keywords:
-        lines.append(f"핵심 키워드 : {html.escape(keywords)}")
+    if global_keywords:
+        lines.append(f"핵심 키워드 : {html.escape(global_keywords)}")
 
     lines.append("─" * 22)
 
-    for i, msg in enumerate(top3):
-        summary = process_text(msg["text"][:300])
+    for i, item in enumerate(items):
+        msg = item["msg"]
+        title = html.escape(item["title"]) if item["title"] else html.escape(msg["text"][:50])
+        keywords = html.escape(item["keywords"])
+        summary = escape_bold(clean_text(item["summary"]))
+
         lines.append(
-            f"\n{medals[i]} <b>[{html.escape(msg['channel'])}]</b>\n"
+            f"\n{MEDALS[i]} <b>[{html.escape(msg['channel'])}]</b>\n"
+            f"제목 : {title}\n"
+            f"키워드 : {keywords}\n"
             f"\n{summary}\n"
             f"\n조회 {msg['views']:,}  ·  <a href=\"{msg['link']}\">원문 보기</a>"
         )
-        if i < len(top3) - 1:
+        if i < len(items) - 1:
             lines.append("")
 
     lines.append("\n" + "─" * 22)
@@ -184,17 +211,15 @@ async def main():
 
     messages.sort(key=lambda x: x["views"], reverse=True)
 
-    if len(messages) >= 3:
-        print("AI 중요도 판단 중...")
-        top3, keywords = rank_with_claude(messages)
-        if len(top3) < 3:
-            top3 = messages[:3]
-            keywords = ""
-    else:
-        top3 = messages
-        keywords = ""
+    print("AI 중요도 판단 중...")
+    items, global_keywords = rank_with_claude(messages)
 
-    msg = build_message(top3, keywords)
+    if not items:
+        print("AI 선별 실패, 조회수 상위 5개 사용")
+        items = [{"msg": m, "title": "", "keywords": "", "summary": m["text"][:200]} for m in messages[:5]]
+        global_keywords = ""
+
+    msg = build_message(items, global_keywords)
     print(msg)
     send_telegram(msg)
 
