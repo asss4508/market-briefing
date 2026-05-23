@@ -59,6 +59,7 @@ async def collect_messages():
                     continue
                 all_messages.append({
                     "channel": channel,
+                    "channel_title": getattr(entity, "title", channel),
                     "text": msg.text[:600],
                     "views": msg.views or 0,
                     "date": msg_time,
@@ -167,16 +168,17 @@ def build_message(items, global_keywords):
 
     for i, item in enumerate(items):
         msg = item["msg"]
+        ch_name = html.escape(msg.get("channel_title", msg["channel"]))
         title = html.escape(item["title"]) if item["title"] else html.escape(msg["text"][:50])
         keywords = html.escape(item["keywords"])
         summary = escape_bold(clean_text(item["summary"]))
 
         lines.append(
-            f"\n{MEDALS[i]} <b>[{html.escape(msg['channel'])}]</b>\n"
-            f"제목 : {title}\n"
-            f"키워드 : {keywords}\n"
+            f"\n<b>{MEDALS[i]} [{ch_name}]</b>\n"
+            f"\n※ 제목 : <b>{title}</b>\n"
+            f"🔍 키워드 : {keywords}\n"
             f"\n{summary}\n"
-            f"\n조회 {msg['views']:,}  ·  <a href=\"{msg['link']}\">원문 보기</a>"
+            f"\n▷ 조회 {msg['views']:,}  ·  <a href=\"{msg['link']}\">원문 보기</a>"
         )
         if i < len(items) - 1:
             lines.append("")
