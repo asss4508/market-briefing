@@ -213,6 +213,8 @@ def generate_report(indices, indicators, world, news, calendar, raw_summary):
 - 새로운 임팩트 기술/산업 이슈가 있으면 포함
 - 볼드(**), 이모티콘 적극 활용해서 가독성 높이기
 - COFIX 같은 국내 대출금리 지표는 제외
+- 항목과 항목 사이 빈 줄(여백) 넣지 말 것
+- 문장 중간에 대시(—, -, –) 사용하지 말 것. 대신 쉼표나 자연스러운 문장으로 연결할 것
 
 **형식 (Telegram HTML 사용):**
 <b>📊 마켓 클로징 리포트 | {date_str}({weekday})</b>
