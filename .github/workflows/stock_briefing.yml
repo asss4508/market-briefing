@@ -2,8 +2,8 @@ name: 주식 상승 종목 브리핑
 
 on:
   schedule:
-    - cron: "30 0 * * 1-5"
-    - cron: "40 6 * * 1-5"
+    - cron: "30 12 * * 1-5"
+    - cron: "30 16 * * 1-5"
   workflow_dispatch:
 
 jobs:
