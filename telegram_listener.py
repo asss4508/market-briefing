@@ -42,7 +42,8 @@ def check_command():
         if chat_id != CHAT_ID:
             continue
         if any(kw in text for kw in TRIGGER_KEYWORDS):
-            print(f"명령 감지: {msg_time.strftime(\"%H:%M:%S\")} UTC")
+            t = msg_time.strftime("%H:%M:%S")
+            print(f"명령 감지: {t} UTC")
             return True
     return False
 
