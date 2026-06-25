@@ -1,0 +1,42 @@
+name: 텔레그램 온디맨드 브리핑
+
+on:
+  schedule:
+    - cron: "*/5 22-23 * * 0,1,2,3,4"
+    - cron: "*/5 0-14  * * 1,2,3,4,5"
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 기본 패키지 설치
+        run: pip install requests
+      - name: 텔레그램 명령 확인
+        id: check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          OUTPUT=$(python telegram_listener.py --check-only)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "TRIGGERED"; then
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+      - name: 추가 패키지 설치
+        if: steps.check.outputs.triggered == 'true'
+        run: pip install beautifulsoup4 anthropic lxml
+      - name: 브리핑 생성 및 전송
+        if: steps.check.outputs.triggered == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python market_report.py
