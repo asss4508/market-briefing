@@ -19,7 +19,10 @@ KST = timezone(timedelta(hours=9))
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
-    "Referer": "https://finance.naver.com/",
+}
+YAHOO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json",
 }
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -31,73 +34,74 @@ GITHUB_PAGES_URL = os.environ.get("GITHUB_PAGES_URL", "https://asss4508.github.i
 # ─── 데이터 수집 ───────────────────────────────────────────────
 
 def find_stock_code(company_name):
-    """Naver Finance 자동완성 API로 종목코드 검색"""
+    """Yahoo Finance 검색으로 한국 종목코드 조회"""
     try:
-        url = (
-            f"https://ac.finance.naver.com/ac"
-            f"?q={company_name}&q_enc=UTF-8&st=111&r_format=json"
-            f"&r_enc=UTF-8&r_unicode=0&t_koreng=1&lt=1&u1=111"
-        )
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        data = res.json()
-        items = data.get("items", [[]])[0]
-        if items:
-            code = items[0][1]
-            name = items[0][0]
-            print(f"[종목검색] {company_name} → {name} ({code})")
-            return code, name
+        url = f"https://query1.finance.yahoo.com/v1/finance/search?q={company_name}&lang=ko&region=KR&quotesCount=5&newsCount=0"
+        res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+        quotes = res.json().get("quotes", [])
+        for q in quotes:
+            sym = q.get("symbol", "")
+            if sym.endswith(".KS") or sym.endswith(".KQ"):
+                code = sym.replace(".KS", "").replace(".KQ", "")
+                name = q.get("shortname") or q.get("longname") or company_name
+                print(f"[종목검색] {company_name} → {name} ({code})")
+                return code, name
     except Exception as e:
-        print(f"[종목검색] 오류: {e}")
+        print(f"[종목검색/Yahoo] 오류: {e}")
+    print(f"[종목검색] 코드 미발견, Claude 지식 기반으로 진행")
     return None, company_name
 
 
 def get_stock_data(code):
-    """Naver Finance 종목 주요 지표 수집"""
+    """Yahoo Finance API로 주가 및 재무 지표 수집"""
     data = {}
-    try:
-        url = f"https://finance.naver.com/item/main.nhn?code={code}"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        price_el = soup.select_one(".no_today .blind")
-        if price_el:
-            data["현재가"] = price_el.text.strip()
-
-        for row in soup.select(".tb_type1 tr, .first tbody tr"):
-            cells = row.select("th, td")
-            if len(cells) >= 2:
-                key = cells[0].text.strip()
-                val = cells[1].text.strip()
-                if key and val and 1 < len(key) < 15 and any(c.isdigit() for c in val):
-                    data[key] = val
-
-        print(f"[주가데이터] {len(data)}개 항목 수집")
-    except Exception as e:
-        print(f"[주가데이터] 오류: {e}")
+    if not code:
+        return data
+    for suffix in [".KS", ".KQ"]:
+        try:
+            symbol = f"{code}{suffix}"
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
+            res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+            meta = res.json().get("chart", {}).get("result", [{}])[0].get("meta", {})
+            price = meta.get("regularMarketPrice")
+            if not price:
+                continue
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+            change_pct = ((price - prev) / prev * 100) if prev else None
+            data["현재가"] = f"{price:,.0f}원"
+            if change_pct is not None:
+                sign = "▲" if change_pct >= 0 else "▼"
+                data["등락률"] = f"{sign}{abs(change_pct):.2f}%"
+            if meta.get("fiftyTwoWeekHigh"):
+                data["52주 고가"] = f"{meta['fiftyTwoWeekHigh']:,.0f}원"
+            if meta.get("fiftyTwoWeekLow"):
+                data["52주 저가"] = f"{meta['fiftyTwoWeekLow']:,.0f}원"
+            if meta.get("regularMarketVolume"):
+                data["거래량"] = f"{meta['regularMarketVolume']:,}"
+            print(f"[주가데이터] {symbol}: {data.get('현재가', '-')} {data.get('등락률', '')}")
+            break
+        except Exception as e:
+            print(f"[주가데이터/{suffix}] 오류: {e}")
     return data
 
 
-def get_company_news(code):
-    """Naver Finance 종목 관련 뉴스 수집"""
+def get_company_news(company_name, code):
+    """Yahoo Finance 뉴스 수집 (Naver 차단 대비)"""
     news = []
-    try:
-        url = (
-            f"https://finance.naver.com/item/news_news.nhn"
-            f"?code={code}&page=1&sm=title_entity_id.basic&clusterId="
-        )
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-        for a in soup.select(".title a, .news_tit a"):
-            text = a.text.strip()
-            if text and len(text) > 5 and text not in news:
-                news.append(text)
-            if len(news) >= 15:
-                break
-        print(f"[뉴스] {len(news)}개 수집")
-    except Exception as e:
-        print(f"[뉴스] 오류: {e}")
+    if code:
+        for suffix in [".KS", ".KQ"]:
+            try:
+                url = f"https://query1.finance.yahoo.com/v1/finance/search?q={code}{suffix}&lang=ko&region=KR&quotesCount=0&newsCount=10"
+                res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+                for item in res.json().get("news", []):
+                    title = item.get("title", "").strip()
+                    if title and title not in news:
+                        news.append(title)
+                if news:
+                    break
+            except Exception as e:
+                print(f"[뉴스/Yahoo] 오류: {e}")
+    print(f"[뉴스] {len(news)}개 수집")
     return news
 
 
@@ -136,8 +140,10 @@ def generate_analysis(company_name, stock_code, stock_data, news):
 
 === 반환 형식 ===
 반드시 아래 JSON 형식으로만 반환 (다른 텍스트 없이):
+(krx_code가 없으면 네 학습 데이터 기반으로 정확한 KRX 6자리 종목코드를 채울 것)
 
 {{
+  "krx_code": "KRX 6자리 종목코드 (예: 003230)",
   "summary": "한 줄 요약: 종목명, 현재가, 핵심 포인트",
   "recommendation": {{
     "opinion": "매수 or 중립 or 매도",
@@ -446,11 +452,8 @@ def main(company_name):
     print(f"기업분석 시작: {company_name}")
     print(f"{'='*50}")
 
-    # 1. 종목코드
+    # 1. 종목코드 (실패해도 Claude 지식 기반으로 계속 진행)
     code, official_name = find_stock_code(company_name)
-    if not code:
-        send_telegram(f"❌ '{company_name}' 종목 검색 실패")
-        return
 
     # 2. 주가 데이터
     print("주가 데이터 수집 중...")
@@ -458,15 +461,16 @@ def main(company_name):
 
     # 3. 뉴스
     print("뉴스 수집 중...")
-    news = get_company_news(code)
+    news = get_company_news(official_name, code)
 
     # 4. AI 분석
     print("AI 분석 생성 중...")
     analysis = generate_analysis(official_name, code, stock_data, news)
 
-    # 5. HTML 생성
+    # 5. HTML 생성 (종목코드 없으면 Claude가 분석에서 반환한 코드 사용)
+    final_code = code or analysis.get("krx_code", "")
     print("HTML 리포트 생성 중...")
-    html = build_html(official_name, code, analysis, stock_data)
+    html = build_html(official_name, final_code, analysis, stock_data)
 
     # 6. 파일 저장
     safe_name = re.sub(r'[^\w가-힣]', '_', official_name)
