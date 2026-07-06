@@ -62,17 +62,13 @@ async def main():
         if text:
             log(f"[수신] chat_id={cid} | '{text[:60]}'")
 
-        # 대상 채널 필터 (Telegram -100 접두사 처리 포함)
-        if not chat_matches(cid, CHAT_ID):
-            return
-
-        # "X 기업분석" 패턴 (앞에 기업명 1~30자)
+        # "X 기업분석" 패턴 (앞에 기업명 1~30자) — CHAT_ID 필터 없이 모든 채팅 허용
         m = re.match(r'^(.{1,30}?)\s*기업분석\s*$', text)
         if not m:
             return
 
         company = m.group(1).strip()
-        log(f"[감지] '{company}' 기업분석 요청")
+        log(f"[감지] chat_id={cid} | '{company}' 기업분석 요청")
 
         # 즉시 접수 메시지 전송 (event.respond: 동일 채팅에 자동 전송)
         await event.respond(
