@@ -9,17 +9,25 @@ on:
 jobs:
   listen:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 코드 체크아웃
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Python 설치
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: 기본 패키지 설치
         run: pip install requests
-      - name: 텔레그램 명령 확인
-        id: check
+
+      # ── 명령 감지 ──────────────────────────────────────────
+      - name: 브리핑 명령 확인
+        id: briefing
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -31,13 +39,40 @@ jobs:
           else
             echo "triggered=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 기업분석 명령 확인
+        id: analysis
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          OUTPUT=$(python telegram_listener.py --check-analysis)
+          echo "$OUTPUT"
+          COMPANY=$(echo "$OUTPUT" | grep "^COMPANY:" | sed 's/^COMPANY://')
+          if [ -n "$COMPANY" ]; then
+            echo "company=$COMPANY" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 추가 패키지 (둘 중 하나라도 트리거 시) ────────────
       - name: 추가 패키지 설치
-        if: steps.check.outputs.triggered == 'true'
-        run: pip install beautifulsoup4 anthropic lxml
-      - name: 브리핑 생성 및 전송
-        if: steps.check.outputs.triggered == 'true'
+        if: steps.briefing.outputs.triggered == 'true' || steps.analysis.outputs.company != ''
+        run: pip install beautifulsoup4 anthropic
+
+      # ── 브리핑 실행 ────────────────────────────────────────
+      - name: 마켓 브리핑 생성
+        if: steps.briefing.outputs.triggered == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python market_report.py
+
+      # ── 기업분석 실행 ──────────────────────────────────────
+      - name: 기업분석 리포트 생성
+        if: steps.analysis.outputs.company != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_PAGES_URL: "https://asss4508.github.io/market-briefing"
+        run: python company_analysis.py "${{ steps.analysis.outputs.company }}"
