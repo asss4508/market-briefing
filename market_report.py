@@ -1,4 +1,3 @@
-import html as html_lib
 import os
 import re
 import requests
@@ -11,10 +10,40 @@ HEADERS = {
     "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
     "Referer": "https://finance.naver.com/",
 }
+YAHOO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json",
+}
 KST = timezone(timedelta(hours=9))
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+
+
+# ─── 공통 헬퍼 ────────────────────────────────────────────────
+
+def _yahoo_price(symbol):
+    """Yahoo Finance에서 현재가와 등락률(%) 반환. 실패 시 (None, None)."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
+    res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+    res.raise_for_status()
+    result = res.json().get("chart", {}).get("result")
+    if not result:
+        return None, None
+    meta = result[0].get("meta", {})
+    price = meta.get("regularMarketPrice")
+    prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+    change_pct = ((price - prev) / prev * 100) if (price and prev and prev != 0) else None
+    return price, change_pct
+
+
+def _fmt(price, change_pct, decimals=2):
+    """가격 + 등락률을 문자열로 포맷."""
+    base = f"{price:,.{decimals}f}"
+    if change_pct is None:
+        return base
+    sign = "▲" if change_pct >= 0 else "▼"
+    return f"{base} ({sign}{abs(change_pct):.2f}%)"
 
 
 # ─── 데이터 수집 ───────────────────────────────────────────────
@@ -36,80 +65,75 @@ def get_korean_indices():
                     "change": chg.text.strip() if chg else "",
                     "rate": pct.text.strip() if pct else "",
                 }
+                print(f"[지수] {code}: {result[code]['value']} ({result[code]['rate']})")
         except Exception as e:
-            print(f"[{code}] 오류: {e}")
+            print(f"[지수/{code}] 오류: {e}")
     return result
 
 
-def get_market_indicators():
+def get_exchange_rates():
+    """Yahoo Finance API로 주요 환율 수집."""
+    rates = {}
+    targets = {
+        "USDKRW=X":  ("원/달러",           1),
+        "JPYKRW=X":  ("원/엔(100엔 기준)", 100),
+        "EURKRW=X":  ("원/유로",           1),
+        "CNYKRW=X":  ("원/위안",           1),
+        "DX-Y.NYB":  ("달러인덱스(DXY)",   1),
+    }
+    for symbol, (label, multiplier) in targets.items():
+        try:
+            price, change_pct = _yahoo_price(symbol)
+            if price is not None:
+                display = price * multiplier
+                rates[label] = _fmt(display, change_pct)
+                print(f"[환율] {label}: {rates[label]}")
+        except Exception as e:
+            print(f"[환율/{symbol}] 오류: {e}")
+    return rates
+
+
+def get_commodities():
+    """Yahoo Finance API로 원자재 및 미국 국채금리 수집."""
     data = {}
-    try:
-        url = "https://finance.naver.com/marketindex/"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        # 환율
-        for item in soup.select(".exchange_table li, #exchange_table li, .market-index-item"):
-            name_tag = item.select_one(".txt_name, .item-name, h3, .blind")
-            val_tag = item.select_one(".num, .num2, .item-value")
-            if name_tag and val_tag:
-                name = name_tag.text.strip()
-                val = val_tag.text.strip()
-                if name and val:
-                    data[name] = val
-
-        # 대안: 특정 selector로 주요 지표 추출
-        for row in soup.select("table tr, .rate_table tr"):
-            cells = row.select("td, th")
-            if len(cells) >= 2:
-                key = cells[0].text.strip()
-                val = cells[1].text.strip()
-                if key and val and len(key) < 20:
-                    data[key] = val
-    except Exception as e:
-        print(f"[지표] 오류: {e}")
+    targets = {
+        "CL=F":  "WTI 유가(달러)",
+        "BZ=F":  "브렌트유(달러)",
+        "GC=F":  "금(달러/온스)",
+        "^TNX":  "미국채 10년물(%)",
+        "^TYX":  "미국채 30년물(%)",
+    }
+    for symbol, label in targets.items():
+        try:
+            price, change_pct = _yahoo_price(symbol)
+            if price is not None:
+                data[label] = _fmt(price, change_pct)
+                print(f"[원자재] {label}: {data[label]}")
+        except Exception as e:
+            print(f"[원자재/{symbol}] 오류: {e}")
     return data
 
 
 def get_world_indices():
+    """Yahoo Finance API로 주요 글로벌 지수 수집."""
     data = {}
-    try:
-        url = "https://finance.naver.com/world/"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-        for item in soup.select(".world_index li, .global_index li"):
-            name = item.select_one(".txt_name, .name")
-            val = item.select_one(".num, .value")
-            chg = item.select_one(".change, .rate")
-            if name and val:
-                data[name.text.strip()] = {
-                    "value": val.text.strip(),
-                    "change": chg.text.strip() if chg else "",
-                }
-    except Exception as e:
-        print(f"[글로벌] 오류: {e}")
+    targets = {
+        "^GSPC":     "S&P 500",
+        "^IXIC":     "나스닥",
+        "^DJI":      "다우존스",
+        "^N225":     "닛케이225",
+        "000001.SS": "상해종합",
+        "^FTSE":     "FTSE100",
+    }
+    for symbol, label in targets.items():
+        try:
+            price, change_pct = _yahoo_price(symbol)
+            if price is not None:
+                data[label] = _fmt(price, change_pct)
+                print(f"[글로벌] {label}: {data[label]}")
+        except Exception as e:
+            print(f"[글로벌/{symbol}] 오류: {e}")
     return data
-
-
-def get_naver_market_summary():
-    """네이버 금융 메인에서 주요 지표 텍스트 추출"""
-    raw_text = ""
-    try:
-        url = "https://finance.naver.com/"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-        # 주요 영역 텍스트 추출
-        for section in soup.select(".group_index, .market_summary, .today_info, #container"):
-            text = section.get_text(" ", strip=True)
-            if len(text) > 50:
-                raw_text += text[:1000] + "\n"
-                break
-    except Exception as e:
-        print(f"[메인] 오류: {e}")
-    return raw_text[:2000]
 
 
 def get_financial_news():
@@ -138,24 +162,21 @@ def get_financial_news():
 
 
 def get_economic_calendar():
-    """investing.com 경제 캘린더"""
     events = []
     try:
         url = "https://kr.investing.com/economic-calendar/"
-        headers = {**HEADERS, "X-Requested-With": "XMLHttpRequest"}
-        res = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers={**HEADERS, "X-Requested-With": "XMLHttpRequest"}, timeout=10)
         soup = BeautifulSoup(res.text, "html.parser")
         for row in soup.select("tr.js-event-item")[:20]:
-            date = row.select_one(".date, td:nth-child(1)")
-            event = row.select_one(".event, td:nth-child(4)")
-            imp = row.select_one(".sentiment, .bull")
-            if event:
-                importance = len(imp.select("i")) if imp else 0
+            date_el = row.select_one(".date, td:nth-child(1)")
+            event_el = row.select_one(".event, td:nth-child(4)")
+            imp_el = row.select_one(".sentiment, .bull")
+            if event_el:
+                importance = len(imp_el.select("i")) if imp_el else 0
                 if importance >= 2:
                     events.append({
-                        "date": date.text.strip() if date else "",
-                        "event": event.text.strip(),
-                        "importance": importance,
+                        "date": date_el.text.strip() if date_el else "",
+                        "event": event_el.text.strip(),
                     })
     except Exception as e:
         print(f"[캘린더] 오류: {e}")
@@ -164,17 +185,19 @@ def get_economic_calendar():
 
 # ─── Claude 리포트 생성 ─────────────────────────────────────────
 
-def generate_report(indices, indicators, world, news, calendar, raw_summary):
+def generate_report(indices, rates, commodities, world, news, calendar):
     now = datetime.now(KST)
     date_str = now.strftime("%Y년 %m월 %d일")
     weekday = ["월", "화", "수", "목", "금", "토", "일"][now.weekday()]
 
-    # 데이터 정리
-    indices_text = "\n".join([f"{k}: {v['value']} ({v['change']}, {v['rate']})" for k, v in indices.items()]) or "수집 실패"
-    indicators_text = "\n".join([f"{k}: {v}" for k, v in list(indicators.items())[:20]]) or ""
-    world_text = "\n".join([f"{k}: {v['value']} {v['change']}" for k, v in list(world.items())[:10]]) or ""
+    indices_text = "\n".join(
+        f"{k}: {v['value']} ({v['change']}, {v['rate']})" for k, v in indices.items()
+    ) or "수집 실패"
+    rates_text = "\n".join(f"{k}: {v}" for k, v in rates.items()) or "수집 실패"
+    commodities_text = "\n".join(f"{k}: {v}" for k, v in commodities.items()) or "수집 실패"
+    world_text = "\n".join(f"{k}: {v}" for k, v in world.items()) or "수집 실패"
     news_text = "\n".join(f"- {h}" for h in news[:25]) or "뉴스 수집 실패"
-    calendar_text = "\n".join([f"{e['date']} {e['event']}" for e in calendar]) if calendar else "직접 조회 필요"
+    calendar_text = "\n".join(f"{e['date']} {e['event']}" for e in calendar) if calendar else "직접 조회 필요"
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
@@ -188,8 +211,11 @@ def generate_report(indices, indicators, world, news, calendar, raw_summary):
 [한국 지수]
 {indices_text}
 
-[시장 지표/환율/원자재]
-{indicators_text}
+[환율]
+{rates_text}
+
+[원자재 및 채권금리]
+{commodities_text}
 
 [글로벌 지수]
 {world_text}
@@ -201,22 +227,30 @@ def generate_report(indices, indicators, world, news, calendar, raw_summary):
 {calendar_text}
 
 === 작성 지침 ===
-아래 형식을 반드시 따르되, 데이터가 없는 항목은 추정치나 일반적 맥락으로 보완하세요.
 
-**작성 원칙:**
-- 너무 길지도 짧지도 않게 (총 1500~2500자 내외)
+📏 분량 및 선별 원칙
+- 총 1500~2500자 내외로 작성
 - 매일 그날 가장 중요한 요소 위주로 선별
-- 한국 시장 메인, 글로벌은 핵심만
-- 주식과 연관된 이슈는 반드시 관련주 제시
-- 신용거래/반대매매는 최근 동향이 있으면 반드시 포함
-- 전쟁/전염병/주요 사회 이슈도 주식 연관 시 포함
-- 새로운 임팩트 기술/산업 이슈가 있으면 포함
-- 볼드(**), 이모티콘 적극 활용해서 가독성 높이기
-- COFIX 같은 국내 대출금리 지표는 제외
-- 항목과 항목 사이 빈 줄(여백) 넣지 말 것
-- 문장 중간에 대시(—, -, –) 사용하지 말 것. 대신 쉼표나 자연스러운 문장으로 연결할 것
+- 데이터가 없는 항목은 추정치나 일반적 맥락으로 보완
 
-**형식 (Telegram HTML 사용):**
+🌏 시장 범위
+- 한국 시장 메인, 글로벌은 핵심만 요약
+
+✅ 반드시 포함할 내용
+- 주식과 연관된 이슈는 관련주 반드시 제시
+- 신용거래/반대매매 최근 동향이 있으면 반드시 포함
+- 전쟁/전염병/주요 사회 이슈는 주식 연관 시 포함
+- 새로운 임팩트 기술/산업 이슈가 있으면 포함
+
+🚫 제외 항목
+- COFIX 등 국내 대출금리 지표는 제외
+
+✍️ 형식 및 표현 규칙
+- 볼드(HTML), 이모티콘 적극 활용해서 가독성 높이기
+- 항목과 항목 사이 빈 줄(여백) 넣지 말 것
+- 문장 중간에 대시(—, -, –) 사용하지 말 것, 쉼표나 자연스러운 문장으로 연결할 것
+
+형식 (Telegram HTML 사용):
 <b>📊 마켓 클로징 리포트 | {date_str}({weekday})</b>
 
 <b>🇰🇷 한국 시장 마감</b>
@@ -225,19 +259,20 @@ def generate_report(indices, indicators, world, news, calendar, raw_summary):
 <b>🌍 글로벌 주요 지표</b>
 (아래 항목을 반드시 포함:
  - 환율: 원/달러 환율 + 달러인덱스(DXY)
- - 미국 국채 금리: 10년물·30년물 현황 및 의미
+ - 미국 국채 금리: 10년물, 30년물 현황 및 의미
  - 국제유가(WTI/브렌트), 금 시세
  - 뉴욕 3대 지수 방향성
- + 핵심 이슈 2~3줄)
+ 핵심 이슈 2~3줄 추가)
 
 <b>🔥 오늘의 핵심 이슈 & 관련주</b>
-(당일 가장 임팩트 있는 이슈 2~3개 / 각 이슈마다 관련 한국 주식 제시 / 번호 앞에 🔴🟠🟡 같은 컬러 이모티콘 없이 ① ② ③ 숫자만 사용)
+(당일 가장 임팩트 있는 이슈 2~3개 / 각 이슈마다 관련 한국 주식 제시 / ① ② ③ 숫자 사용)
 
 <b>⚡ 주목할 신기술·산업 동향</b>
 (있는 경우에만 / AI·로봇·에너지·우주·바이오 등)
 
 <b>📅 주요 일정</b>
 (1주일 내 필수 포함: 미국 CPI·PPI·PCE·고용지표·FOMC / 한국금통위·실적발표 / 중요한 것은 다음달까지 / 날짜와 함께 시장 영향도 한 줄 코멘트)
+
 위 형식에 맞게 완성된 리포트를 작성해주세요. HTML 태그만 사용하고, 마크다운(** 등)은 사용하지 마세요."""
         }]
     )
@@ -258,7 +293,6 @@ def send_telegram(message):
             current += ("\n" if current else "") + line
     if current:
         chunks.append(current)
-
     for chunk in chunks:
         payload = {
             "chat_id": CHAT_ID,
@@ -280,9 +314,11 @@ if __name__ == "__main__":
     print("한국 지수 수집 중...")
     indices = get_korean_indices()
 
-    print("시장 지표 수집 중...")
-    indicators = get_market_indicators()
-    raw_summary = get_naver_market_summary()
+    print("환율 수집 중...")
+    rates = get_exchange_rates()
+
+    print("원자재/채권금리 수집 중...")
+    commodities = get_commodities()
 
     print("글로벌 지수 수집 중...")
     world = get_world_indices()
@@ -293,10 +329,10 @@ if __name__ == "__main__":
     print("경제 일정 수집 중...")
     calendar = get_economic_calendar()
 
-    print(f"수집 완료 - 지표:{len(indicators)} 뉴스:{len(news)} 일정:{len(calendar)}")
+    print(f"수집 완료 - 환율:{len(rates)} 원자재:{len(commodities)} 글로벌:{len(world)} 뉴스:{len(news)} 일정:{len(calendar)}")
 
     print("Claude 리포트 생성 중...")
-    report = generate_report(indices, indicators, world, news, calendar, raw_summary)
+    report = generate_report(indices, rates, commodities, world, news, calendar)
 
     print("=" * 50)
     print(report)
