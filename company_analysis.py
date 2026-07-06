@@ -33,23 +33,43 @@ GITHUB_PAGES_URL = os.environ.get("GITHUB_PAGES_URL", "https://asss4508.github.i
 
 # ─── 데이터 수집 ───────────────────────────────────────────────
 
-def find_stock_code(company_name):
-    """Yahoo Finance 검색으로 한국 종목코드 조회"""
+def find_stock_code(query):
+    """종목코드(6자리) 또는 회사명으로 KRX 코드 및 회사명 반환"""
+    query = query.strip()
+
+    # 6자리 숫자 → 코드 직접 사용, Yahoo Finance에서 회사명 조회
+    if re.match(r'^\d{6}$', query):
+        code = query
+        for suffix in [".KS", ".KQ"]:
+            try:
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{code}{suffix}?interval=1d&range=1d"
+                res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
+                meta = res.json().get("chart", {}).get("result", [{}])[0].get("meta", {})
+                if meta.get("regularMarketPrice"):
+                    name = meta.get("shortName") or meta.get("longName") or code
+                    print(f"[종목검색] 코드 직접 입력 → {name} ({code})")
+                    return code, name
+            except Exception as e:
+                print(f"[종목검색/{code}{suffix}] 오류: {e}")
+        print(f"[종목검색] {code} 조회 실패, 코드만으로 진행")
+        return code, code
+
+    # 회사명 → Yahoo Finance 검색
     try:
-        url = f"https://query1.finance.yahoo.com/v1/finance/search?q={company_name}&lang=ko&region=KR&quotesCount=5&newsCount=0"
+        url = f"https://query1.finance.yahoo.com/v1/finance/search?q={query}&lang=ko&region=KR&quotesCount=5&newsCount=0"
         res = requests.get(url, headers=YAHOO_HEADERS, timeout=10)
         quotes = res.json().get("quotes", [])
         for q in quotes:
             sym = q.get("symbol", "")
             if sym.endswith(".KS") or sym.endswith(".KQ"):
                 code = sym.replace(".KS", "").replace(".KQ", "")
-                name = q.get("shortname") or q.get("longname") or company_name
-                print(f"[종목검색] {company_name} → {name} ({code})")
+                name = q.get("shortname") or q.get("longname") or query
+                print(f"[종목검색] {query} → {name} ({code})")
                 return code, name
     except Exception as e:
         print(f"[종목검색/Yahoo] 오류: {e}")
     print(f"[종목검색] 코드 미발견, Claude 지식 기반으로 진행")
-    return None, company_name
+    return None, query
 
 
 def get_stock_data(code):
