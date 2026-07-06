@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기업분석 리포트</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px}
+.wrap{max-width:720px;margin:0 auto;padding:40px 16px}
+.hd{background:#0d1b3e;color:#fff;border-radius:14px;padding:28px 32px;margin-bottom:24px}
+.hd h1{font-size:22px;font-weight:800;margin-bottom:6px}
+.hd p{font-size:13px;color:#8892a4}
+.guide{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.guide h2{font-size:14px;font-weight:700;border-left:3px solid #1a73e8;padding-left:10px;margin-bottom:12px}
+.guide code{background:#f0f4ff;color:#1a73e8;padding:2px 8px;border-radius:4px;font-size:13px}
+.guide p{font-size:13px;color:#444;line-height:1.7;margin-top:6px}
+.list-card{background:#fff;border-radius:12px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.list-card h2{font-size:14px;font-weight:700;border-left:3px solid #1a73e8;padding-left:10px;margin-bottom:14px}
+#report-list{list-style:none;padding:0}
+#report-list li{padding:10px 0;border-bottom:1px solid #f2f2f2;font-size:13px}
+#report-list li:last-child{border-bottom:none}
+#report-list a{color:#1a73e8;text-decoration:none;font-weight:600}
+#report-list a:hover{text-decoration:underline}
+.empty{color:#aaa;font-size:13px;padding:10px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1>기업분석 리포트</h1>
+    <p>AI 기반 한국 주식 기업분석 · TradingView 차트 연동</p>
+  </div>
+
+  <div class="guide">
+    <h2>사용 방법</h2>
+    <p>텔레그램 채널에 아래 형식으로 입력하면 5분 내 리포트 링크가 전송됩니다.</p>
+    <p style="margin-top:10px"><code>삼양식품 기업분석</code></p>
+    <p style="margin-top:6px;font-size:12px;color:#888">· 종목명 + 기업분석 형식으로 입력<br>· 리포트 생성 후 이 페이지에도 자동 추가</p>
+  </div>
+
+  <div class="list-card">
+    <h2>생성된 리포트</h2>
+    <ul id="report-list">
+      <li class="empty">아직 생성된 리포트가 없습니다.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
