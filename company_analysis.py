@@ -125,6 +125,49 @@ def get_company_news(company_name, code):
     return news
 
 
+def get_financial_history(code):
+    """Yahoo Finance timeseries API로 5개년 연간 재무 데이터 수집"""
+    if not code:
+        return {}
+    types = "annualTotalRevenue,annualOperatingIncome,annualNetIncome"
+    for suffix in [".KS", ".KQ"]:
+        symbol = f"{code}{suffix}"
+        try:
+            url = (
+                "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1"
+                f"/finance/timeseries/{symbol}"
+                f"?type={types}&period1=1388534400&period2=9999999999"
+            )
+            r = requests.get(url, headers=YAHOO_HEADERS, timeout=15)
+            items = r.json().get("timeseries", {}).get("result", [])
+            if not items:
+                continue
+            series = {}
+            for item in items:
+                key = item.get("meta", {}).get("type", "")
+                vals = item.get(key, [])
+                if vals:
+                    series[key] = {
+                        v["asOfDate"][:4]: round(v["reportedValue"]["raw"] / 1e8)
+                        for v in vals if "reportedValue" in v
+                    }
+            rev = series.get("annualTotalRevenue", {})
+            if not rev:
+                continue
+            years = sorted(rev.keys())[-5:]
+            result = {
+                "years": years,
+                "revenue":          [rev.get(y) for y in years],
+                "operating_income": [series.get("annualOperatingIncome", {}).get(y) for y in years],
+                "net_income":       [series.get("annualNetIncome", {}).get(y) for y in years],
+            }
+            print(f"[재무이력] {symbol}: {len(years)}년치", flush=True)
+            return result
+        except Exception as e:
+            print(f"[재무이력/{suffix}] 오류: {e}", flush=True)
+    return {}
+
+
 # ─── Claude 분석 생성 ─────────────────────────────────────────
 
 def generate_analysis(company_name, stock_code, stock_data, news):
@@ -190,6 +233,10 @@ def generate_analysis(company_name, stock_code, stock_data, news):
     "opportunity": ["기회1", "기회2", "기회3"],
     "threat": ["위협1", "위협2"]
   }},
+  "revenue_segments": [
+    {{"name": "사업부명", "pct": 0~100 정수, "note": "1줄 설명"}},
+    ...
+  ],
   "bull_case": ["긍정 시나리오 1", "2", "3", "4"],
   "risk_factors": ["리스크 1", "2", "3", "4"],
   "conclusion": ["결론 1줄", "2줄", "3줄"]
@@ -206,9 +253,58 @@ def generate_analysis(company_name, stock_code, stock_data, news):
 
 # ─── HTML 생성 ────────────────────────────────────────────────
 
-def build_html(company_name, stock_code, analysis, stock_data):
+def build_html(company_name, stock_code, analysis, stock_data, financial_history=None):
     now = datetime.now(KST)
     date_str = now.strftime("%Y.%m.%d")
+    fh = financial_history or {}
+
+    # 재무 차트 JSON 직렬화
+    fin_years_json  = json.dumps(fh.get("years", []))
+    fin_rev_json    = json.dumps(fh.get("revenue", []))
+    fin_op_json     = json.dumps(fh.get("operating_income", []))
+    fin_net_json    = json.dumps(fh.get("net_income", []))
+
+    # 사업부 매출 비중
+    segments        = analysis.get("revenue_segments", [])
+    seg_labels_json = json.dumps([s.get("name", "") for s in segments])
+    seg_pcts_json   = json.dumps([s.get("pct", 0) for s in segments])
+    seg_notes_json  = json.dumps([s.get("note", "") for s in segments])
+    seg_colors      = ["#1a73e8","#34a853","#f29900","#ea4335","#9c27b0","#00bcd4"]
+
+    # 5개년 재무 테이블 HTML
+    def make_fin_table():
+        years = fh.get("years", [])
+        if not years:
+            return '<p style="color:#aaa;font-size:12px;padding:6px 0">재무 데이터를 가져오지 못했습니다.</p>'
+        hdrs = "".join(f"<th>{y}</th>" for y in years)
+        rows = []
+        for label, key in [("매출액 (억원)", "revenue"), ("영업이익 (억원)", "operating_income"), ("순이익 (억원)", "net_income")]:
+            vals = fh.get(key, [])
+            cells = ""
+            for i, v in enumerate(vals):
+                if v is None:
+                    cells += "<td>-</td>"
+                else:
+                    txt = f"{v:,}"
+                    if i > 0 and vals[i-1] is not None and vals[i-1] != 0:
+                        chg = (v - vals[i-1]) / abs(vals[i-1]) * 100
+                        color = "#1a73e8" if chg >= 0 else "#d93025"
+                        arrow = "▲" if chg >= 0 else "▼"
+                        txt += f'<br><span style="font-size:10px;color:{color}">{arrow}{abs(chg):.1f}%</span>'
+                    cells += f"<td>{txt}</td>"
+            rows.append(f'<tr><td><b>{label}</b></td>{cells}</tr>')
+        return f'<table class="fin-tbl"><thead><tr><th>항목</th>{hdrs}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+
+    fin_table_html = make_fin_table()
+
+    # 사업부 범례 HTML
+    seg_legend_html = "".join(
+        f'<div><span class="seg-dot" style="background:{seg_colors[i % len(seg_colors)]}"></span>'
+        f'<b>{s.get("name","")}</b> {s.get("pct",0)}%'
+        f'{"  <span style=\'color:#888\'>— " + s.get("note","") + "</span>" if s.get("note") else ""}'
+        f'</div>'
+        for i, s in enumerate(segments)
+    )
 
     rec = analysis.get("recommendation", {})
     opinion = rec.get("opinion", "중립")
@@ -246,6 +342,7 @@ def build_html(company_name, stock_code, analysis, stock_data):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{company_name} 기업분석 · {date_str}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px;line-height:1.75}}
@@ -312,7 +409,17 @@ ul.nl li:last-child{{border-bottom:none}}
 
 .footer{{text-align:center;font-size:11px;color:#aaa;padding:20px 0 4px}}
 
-@media(max-width:600px){{.swot,.two{{grid-template-columns:1fr}}.hd-top{{flex-direction:column}}}}
+.fin-tbl{{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px;overflow-x:auto;display:block}}
+.fin-tbl th,.fin-tbl td{{padding:7px 10px;text-align:right;border-bottom:1px solid #f2f2f2;white-space:nowrap}}
+.fin-tbl th{{background:#f8f9fb;font-weight:700;color:#555;text-align:center}}
+.fin-tbl td:first-child,.fin-tbl th:first-child{{text-align:left;min-width:120px}}
+.fin-tbl tr:last-child td{{border-bottom:none}}
+.fin-chart-wrap{{height:220px;margin-top:16px;position:relative}}
+.seg-wrap{{display:flex;gap:20px;align-items:center;height:220px}}
+.seg-chart-box{{flex:0 0 200px;height:200px}}
+.seg-legend{{flex:1;font-size:12px;line-height:2}}
+.seg-dot{{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}}
+@media(max-width:600px){{.swot,.two{{grid-template-columns:1fr}}.hd-top{{flex-direction:column}}.seg-wrap{{flex-direction:column;height:auto}}.seg-chart-box{{flex:none;width:100%}}}}
 </style>
 </head>
 <body>
@@ -334,18 +441,25 @@ ul.nl li:last-child{{border-bottom:none}}
 </div>
 
 <div class="chart-wrap">
-  <div class="cl-label">Price Chart</div>
-  <div class="tradingview-widget-container" style="height:420px">
-    <div id="tv_chart" style="height:400px"></div>
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-    new TradingView.widget({{
-      "autosize":true,"symbol":"KRX:{stock_code}","interval":"D",
-      "timezone":"Asia/Seoul","theme":"light","style":"1","locale":"kr",
-      "toolbar_bg":"#f8f9fb","enable_publishing":false,"allow_symbol_change":false,
-      "container_id":"tv_chart","hide_side_toolbar":false,
-      "studies":["MASimple@tv-basicstudies","Volume@tv-basicstudies"]
-    }});
+  <div class="cl-label">Price Chart · KRX:{stock_code}</div>
+  <div class="tradingview-widget-container" style="height:460px;width:100%">
+    <div class="tradingview-widget-container__widget" style="height:calc(100% - 28px);width:100%"></div>
+    <div style="font-size:11px;color:#aaa;padding-top:4px;text-align:right">
+      <a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:#aaa">TradingView</a>
+    </div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+    {{
+      "autosize": true,
+      "symbol": "KRX:{stock_code}",
+      "interval": "W",
+      "timezone": "Asia/Seoul",
+      "theme": "light",
+      "style": "1",
+      "locale": "kr",
+      "allow_symbol_change": true,
+      "calendar": false,
+      "hide_top_toolbar": false
+    }}
     </script>
   </div>
 </div>
@@ -390,6 +504,20 @@ ul.nl li:last-child{{border-bottom:none}}
 </div>
 
 <div class="card">
+  <div class="ct">5개년 재무 현황 (연간, 억원)</div>
+  {fin_table_html}
+  <div class="fin-chart-wrap"><canvas id="finChart"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="ct">사업부별 매출 비중</div>
+  <div class="seg-wrap">
+    <div class="seg-chart-box"><canvas id="segChart"></canvas></div>
+    <div class="seg-legend">{seg_legend_html}</div>
+  </div>
+</div>
+
+<div class="card">
   <div class="ct">SWOT 분석</div>
   <div class="swot">
     <div class="sb s"><div class="sl">S · Strength</div>{swot_rows(sw.get("strength", []))}</div>
@@ -426,28 +554,83 @@ ul.nl li:last-child{{border-bottom:none}}
 </div>
 
 </div>
+
+<script>
+const finYears   = {fin_years_json};
+const finRevenue = {fin_rev_json};
+const finOpIncome= {fin_op_json};
+const finNetIncome={fin_net_json};
+const segLabels  = {seg_labels_json};
+const segPcts    = {seg_pcts_json};
+const segNotes   = {seg_notes_json};
+
+document.addEventListener('DOMContentLoaded', function() {{
+  // ── 5개년 재무 차트 ──────────────────────────────
+  const finEl = document.getElementById('finChart');
+  if (finEl && finYears.length > 0) {{
+    new Chart(finEl, {{
+      data: {{
+        labels: finYears,
+        datasets: [
+          {{ type:'bar', label:'매출액', data:finRevenue,   backgroundColor:'#1a73e830', borderColor:'#1a73e8', borderWidth:2, yAxisID:'y' }},
+          {{ type:'bar', label:'영업이익', data:finOpIncome, backgroundColor:'#f2990030', borderColor:'#f29900', borderWidth:2, yAxisID:'y' }},
+          {{ type:'line', label:'순이익', data:finNetIncome, borderColor:'#34a853', backgroundColor:'#34a85318', borderWidth:2, pointRadius:4, fill:true, tension:0.3, yAxisID:'y' }}
+        ]
+      }},
+      options:{{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{{
+          legend:{{ position:'top', labels:{{ font:{{ size:11 }} }} }},
+          tooltip:{{ callbacks:{{ label:c => `${{c.dataset.label}}: ${{c.parsed.y != null ? c.parsed.y.toLocaleString() : '-'}}억원` }} }}
+        }},
+        scales:{{ y:{{ ticks:{{ callback:v => v>=10000 ? `${{(v/10000).toFixed(0)}}조` : `${{v.toLocaleString()}}억` }}, grid:{{ color:'#f0f0f0' }} }} }}
+      }}
+    }});
+  }}
+
+  // ── 사업부 매출 도넛 차트 ───────────────────────
+  const segEl = document.getElementById('segChart');
+  if (segEl && segLabels.length > 0) {{
+    new Chart(segEl, {{
+      type:'doughnut',
+      data:{{
+        labels:segLabels,
+        datasets:[{{ data:segPcts, backgroundColor:['#1a73e8','#34a853','#f29900','#ea4335','#9c27b0','#00bcd4'], borderWidth:2, borderColor:'#fff' }}]
+      }},
+      options:{{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{{
+          legend:{{ display:false }},
+          tooltip:{{ callbacks:{{ label:c => `${{c.label}}: ${{c.parsed}}%${{segNotes[c.dataIndex] ? ' ('+segNotes[c.dataIndex]+')' : ''}}` }} }}
+        }}
+      }}
+    }});
+  }}
+}});
+</script>
 </body>
 </html>"""
 
 
 # ─── Git 푸시 ─────────────────────────────────────────────────
 
-def git_push(company_name, filepath):
+def git_push(company_name, *filepaths):
     try:
         subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
         subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
-        subprocess.run(["git", "add", str(filepath)], check=True)
+        for fp in filepaths:
+            subprocess.run(["git", "add", str(fp)], check=True)
         result = subprocess.run(
             ["git", "commit", "-m", f"report: {company_name} 기업분석 {datetime.now(KST).strftime('%Y.%m.%d')}"],
             capture_output=True, text=True
         )
         if "nothing to commit" in result.stdout:
-            print("[Git] 변경사항 없음")
+            print("[Git] 변경사항 없음", flush=True)
         else:
             subprocess.run(["git", "push"], check=True)
-            print("[Git] 푸시 완료")
+            print("[Git] 푸시 완료", flush=True)
     except subprocess.CalledProcessError as e:
-        print(f"[Git] 오류: {e}")
+        print(f"[Git] 오류: {e}", flush=True)
 
 
 # ─── 텔레그램 전송 ────────────────────────────────────────────
@@ -465,6 +648,33 @@ def send_telegram(message):
     }, timeout=10)
 
 
+def update_report_list(official_name, safe_name, date_str, analysis, report_type="기업분석"):
+    """docs/report-list.json 업데이트 (대시보드용 인덱스)"""
+    list_path = Path("docs/report-list.json")
+    try:
+        existing = json.loads(list_path.read_text(encoding="utf-8")) if list_path.exists() else {"reports": []}
+    except Exception:
+        existing = {"reports": []}
+    rec = analysis.get("recommendation", {})
+    entry = {
+        "type":     report_type,
+        "title":    official_name,
+        "file":     f"reports/{safe_name}.html",
+        "date":     date_str,
+        "opinion":  rec.get("opinion", "-"),
+        "summary":  analysis.get("summary", ""),
+        "buy_pct":  rec.get("buy_pct", 0),
+        "hold_pct": rec.get("hold_pct", 0),
+        "sell_pct": rec.get("sell_pct", 0),
+    }
+    existing["reports"] = [r for r in existing["reports"] if r.get("title") != official_name]
+    existing["reports"].insert(0, entry)
+    existing["updated"] = date_str
+    list_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[리포트목록] {list_path} 업데이트", flush=True)
+    return list_path
+
+
 # ─── 메인 ────────────────────────────────────────────────────
 
 def main(company_name):
@@ -476,33 +686,41 @@ def main(company_name):
     code, official_name = find_stock_code(company_name)
 
     # 2. 주가 데이터
-    print("주가 데이터 수집 중...")
+    print("주가 데이터 수집 중...", flush=True)
     stock_data = get_stock_data(code)
 
     # 3. 뉴스
-    print("뉴스 수집 중...")
+    print("뉴스 수집 중...", flush=True)
     news = get_company_news(official_name, code)
 
-    # 4. AI 분석
-    print("AI 분석 생성 중...")
+    # 4. 5개년 재무 데이터
+    print("재무 이력 수집 중...", flush=True)
+    financial_history = get_financial_history(code)
+
+    # 5. AI 분석
+    print("AI 분석 생성 중...", flush=True)
     analysis = generate_analysis(official_name, code, stock_data, news)
 
-    # 5. HTML 생성 (종목코드 없으면 Claude가 분석에서 반환한 코드 사용)
+    # 6. HTML 생성 (종목코드 없으면 Claude가 분석에서 반환한 코드 사용)
     final_code = code or analysis.get("krx_code", "")
-    print("HTML 리포트 생성 중...")
-    html = build_html(official_name, final_code, analysis, stock_data)
+    print("HTML 리포트 생성 중...", flush=True)
+    html = build_html(official_name, final_code, analysis, stock_data, financial_history)
 
-    # 6. 파일 저장
+    # 7. 파일 저장
     safe_name = re.sub(r'[^\w가-힣]', '_', official_name)
     filepath = Path(f"docs/reports/{safe_name}.html")
     filepath.parent.mkdir(parents=True, exist_ok=True)
     filepath.write_text(html, encoding="utf-8")
-    print(f"[저장] {filepath}")
+    date_str = datetime.now(KST).strftime("%Y.%m.%d")
+    print(f"[저장] {filepath}", flush=True)
 
-    # 7. Git push
-    git_push(official_name, filepath)
+    # 8. 리포트 목록 업데이트
+    list_path = update_report_list(official_name, safe_name, date_str, analysis)
 
-    # 8. 텔레그램 링크 전송
+    # 9. Git push (리포트 + 목록 함께)
+    git_push(official_name, filepath, list_path)
+
+    # 10. 텔레그램 링크 전송
     rec = analysis.get("recommendation", {})
     url = f"{GITHUB_PAGES_URL}/reports/{safe_name}.html"
     send_telegram(

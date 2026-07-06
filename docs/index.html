@@ -3,48 +3,237 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>기업분석 리포트</title>
+<title>FinBot Analytics — AI 투자 분석 대시보드</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px}
-.wrap{max-width:720px;margin:0 auto;padding:40px 16px}
-.hd{background:#0d1b3e;color:#fff;border-radius:14px;padding:28px 32px;margin-bottom:24px}
-.hd h1{font-size:22px;font-weight:800;margin-bottom:6px}
-.hd p{font-size:13px;color:#8892a4}
-.guide{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.guide h2{font-size:14px;font-weight:700;border-left:3px solid #1a73e8;padding-left:10px;margin-bottom:12px}
-.guide code{background:#f0f4ff;color:#1a73e8;padding:2px 8px;border-radius:4px;font-size:13px}
-.guide p{font-size:13px;color:#444;line-height:1.7;margin-top:6px}
-.list-card{background:#fff;border-radius:12px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-.list-card h2{font-size:14px;font-weight:700;border-left:3px solid #1a73e8;padding-left:10px;margin-bottom:14px}
-#report-list{list-style:none;padding:0}
-#report-list li{padding:10px 0;border-bottom:1px solid #f2f2f2;font-size:13px}
-#report-list li:last-child{border-bottom:none}
-#report-list a{color:#1a73e8;text-decoration:none;font-weight:600}
-#report-list a:hover{text-decoration:underline}
-.empty{color:#aaa;font-size:13px;padding:10px 0}
+a{text-decoration:none;color:inherit}
+
+/* ── 헤더 ─────────────────────────────── */
+.hd{background:#0d1b3e;color:#fff;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.logo{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.logo span{color:#4ea8ff}
+.hd-sub{font-size:11px;color:#8892a4;margin-top:2px}
+.hd-right{font-size:12px;color:#8892a4}
+
+/* ── 탭 네비게이션 ─────────────────────── */
+.nav{background:#fff;border-bottom:1px solid #e8ecf0;padding:0 24px;display:flex;gap:0;overflow-x:auto}
+.nav-btn{padding:14px 20px;font-size:13px;font-weight:600;color:#666;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all .15s}
+.nav-btn:hover{color:#1a73e8}
+.nav-btn.active{color:#1a73e8;border-bottom-color:#1a73e8}
+
+/* ── 메인 콘텐츠 ────────────────────────── */
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}
+
+/* ── 통계 요약 ──────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.stat-label{font-size:11px;color:#888;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
+.stat-value{font-size:24px;font-weight:800;color:#0d1b3e}
+.stat-sub{font-size:11px;color:#aaa;margin-top:3px}
+
+/* ── 검색 ───────────────────────────────── */
+.search-wrap{margin-bottom:20px}
+#search{width:100%;padding:11px 16px;border:1px solid #e0e4ea;border-radius:10px;font-size:13px;background:#fff;outline:none;transition:border .15s}
+#search:focus{border-color:#1a73e8}
+
+/* ── 카드 그리드 ────────────────────────── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);cursor:pointer;transition:transform .15s,box-shadow .15s;display:block}
+.card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.card-type{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#888;background:#f0f2f5;padding:3px 8px;border-radius:4px}
+.card-date{font-size:11px;color:#bbb}
+.card-title{font-size:17px;font-weight:800;color:#0d1b3e;margin-bottom:6px;line-height:1.3}
+.card-summary{font-size:12px;color:#666;line-height:1.6;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;margin-bottom:10px}
+.badge.매수{background:#e8f0fe;color:#1a73e8}
+.badge.중립{background:#fef7e0;color:#b06000}
+.badge.매도{background:#fce8e6;color:#d93025}
+.op-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;gap:2px}
+.op-bar-buy{background:#1a73e8;border-radius:3px}
+.op-bar-hold{background:#f29900;border-radius:3px}
+.op-bar-sell{background:#d93025;border-radius:3px}
+.op-pcts{display:flex;gap:12px;font-size:11px;color:#888;margin-top:5px}
+
+/* ── 빈 상태 ─────────────────────────────── */
+.empty{text-align:center;padding:60px 20px;color:#bbb}
+.empty .icon{font-size:40px;margin-bottom:12px}
+.empty p{font-size:14px}
+.empty small{font-size:12px;color:#ccc;margin-top:6px;display:block}
+
+/* ── 사용 안내 ──────────────────────────── */
+.guide{background:#fff;border-radius:14px;padding:20px 24px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,.07);display:flex;gap:24px;flex-wrap:wrap}
+.guide-item{flex:1;min-width:200px}
+.guide-item h3{font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.guide-cmd{background:#f0f4ff;color:#1a73e8;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:600;display:inline-block;margin-bottom:4px}
+.guide-item p{font-size:12px;color:#666;line-height:1.6}
+
+@media(max-width:640px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .nav-btn{padding:12px 14px;font-size:12px}
+  .hd{padding:0 14px}
+  .guide{flex-direction:column;gap:12px}
+}
 </style>
 </head>
 <body>
+
+<header class="hd">
+  <div>
+    <div class="logo">Fin<span>Bot</span> Analytics</div>
+    <div class="hd-sub">AI 기반 한국 주식 분석 · 누구나 접근 가능한 공개 리포트</div>
+  </div>
+  <div class="hd-right" id="updated-time"></div>
+</header>
+
+<nav class="nav">
+  <button class="nav-btn active" onclick="filterReports('all', this)">전체</button>
+  <button class="nav-btn" onclick="filterReports('기업분석', this)">기업분석</button>
+  <button class="nav-btn" onclick="filterReports('산업분석', this)">산업분석</button>
+  <button class="nav-btn" onclick="filterReports('이슈분석', this)">이슈분석</button>
+</nav>
+
 <div class="wrap">
-  <div class="hd">
-    <h1>기업분석 리포트</h1>
-    <p>AI 기반 한국 주식 기업분석 · TradingView 차트 연동</p>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">총 리포트</div>
+      <div class="stat-value" id="stat-total">0</div>
+      <div class="stat-sub">누적 생성</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">기업분석</div>
+      <div class="stat-value" id="stat-corp">0</div>
+      <div class="stat-sub">종목 커버리지</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">매수 비중</div>
+      <div class="stat-value" id="stat-buy">-</div>
+      <div class="stat-sub">전체 평균</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">최근 업데이트</div>
+      <div class="stat-value" id="stat-date" style="font-size:15px">-</div>
+      <div class="stat-sub">KST 기준</div>
+    </div>
   </div>
 
   <div class="guide">
-    <h2>사용 방법</h2>
-    <p>텔레그램 채널에 아래 형식으로 입력하면 5분 내 리포트 링크가 전송됩니다.</p>
-    <p style="margin-top:10px"><code>삼양식품 기업분석</code></p>
-    <p style="margin-top:6px;font-size:12px;color:#888">· 종목명 + 기업분석 형식으로 입력<br>· 리포트 생성 후 이 페이지에도 자동 추가</p>
+    <div class="guide-item">
+      <h3>기업분석 요청</h3>
+      <div class="guide-cmd">삼성전자 기업분석</div>
+      <p>텔레그램 채널에 입력하면<br>약 1분 내 리포트 생성</p>
+    </div>
+    <div class="guide-item">
+      <h3>종목코드로 검색</h3>
+      <div class="guide-cmd">000660 기업분석</div>
+      <p>6자리 KRX 코드로도<br>바로 분석 가능</p>
+    </div>
+    <div class="guide-item">
+      <h3>리포트 내용</h3>
+      <p>TradingView 차트 · 5개년 재무<br>SWOT · Bull/Bear · 투자의견</p>
+    </div>
   </div>
 
-  <div class="list-card">
-    <h2>생성된 리포트</h2>
-    <ul id="report-list">
-      <li class="empty">아직 생성된 리포트가 없습니다.</li>
-    </ul>
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="종목명 검색..." oninput="renderCards()">
   </div>
+
+  <div class="grid" id="cards">
+    <div class="empty">
+      <div class="icon">📊</div>
+      <p>리포트 로딩 중...</p>
+    </div>
+  </div>
+
 </div>
+
+<script>
+let allReports = [];
+let currentFilter = 'all';
+
+fetch('./report-list.json?' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    allReports = data.reports || [];
+    if (data.updated) {
+      document.getElementById('updated-time').textContent = data.updated + ' 업데이트';
+    }
+    updateStats();
+    renderCards();
+  })
+  .catch(() => {
+    document.getElementById('cards').innerHTML = `
+      <div class="empty" style="grid-column:1/-1">
+        <div class="icon">📭</div>
+        <p>아직 생성된 리포트가 없습니다</p>
+        <small>텔레그램에서 "종목명 기업분석" 으로 첫 리포트를 만들어보세요</small>
+      </div>`;
+  });
+
+function filterReports(type, btn) {
+  currentFilter = type;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCards();
+}
+
+function updateStats() {
+  const corp = allReports.filter(r => r.type === '기업분석');
+  const buys = allReports.filter(r => r.opinion === '매수');
+  document.getElementById('stat-total').textContent = allReports.length;
+  document.getElementById('stat-corp').textContent = corp.length;
+  document.getElementById('stat-buy').textContent =
+    allReports.length ? Math.round(buys.length / allReports.length * 100) + '%' : '-';
+  if (allReports.length) {
+    document.getElementById('stat-date').textContent = allReports[0].date || '-';
+  }
+}
+
+function renderCards() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let list = currentFilter === 'all'
+    ? allReports
+    : allReports.filter(r => r.type === currentFilter);
+  if (q) list = list.filter(r => r.title.toLowerCase().includes(q) || (r.summary||'').toLowerCase().includes(q));
+
+  const grid = document.getElementById('cards');
+  if (!list.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
+      <div class="icon">🔍</div><p>일치하는 리포트가 없습니다</p></div>`;
+    return;
+  }
+
+  const opColors = { '매수': '#1a73e8', '중립': '#f29900', '매도': '#d93025' };
+
+  grid.innerHTML = list.map(r => {
+    const buy  = r.buy_pct  || 0;
+    const hold = r.hold_pct || 0;
+    const sell = r.sell_pct || 0;
+    const oc = opColors[r.opinion] || '#888';
+    return `
+    <a class="card" href="${r.file}" target="_blank">
+      <div class="card-top">
+        <span class="card-type">${r.type}</span>
+        <span class="card-date">${r.date}</span>
+      </div>
+      <div class="card-title">${r.title}</div>
+      <div class="card-summary">${r.summary || ''}</div>
+      <span class="badge ${r.opinion}" style="color:${oc}">${r.opinion}</span>
+      <div class="op-bar">
+        <div class="op-bar-buy"  style="flex:${buy}"></div>
+        <div class="op-bar-hold" style="flex:${hold}"></div>
+        <div class="op-bar-sell" style="flex:${sell}"></div>
+      </div>
+      <div class="op-pcts">
+        <span>매수 <b>${buy}%</b></span>
+        <span>중립 <b>${hold}%</b></span>
+        <span>매도 <b>${sell}%</b></span>
+      </div>
+    </a>`;
+  }).join('');
+}
+</script>
 </body>
 </html>
