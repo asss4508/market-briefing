@@ -297,14 +297,18 @@ def build_html(company_name, stock_code, analysis, stock_data, financial_history
 
     fin_table_html = make_fin_table()
 
-    # 사업부 범례 HTML
-    seg_legend_html = "".join(
-        f'<div><span class="seg-dot" style="background:{seg_colors[i % len(seg_colors)]}"></span>'
-        f'<b>{s.get("name","")}</b> {s.get("pct",0)}%'
-        f'{"  <span style=\'color:#888\'>— " + s.get("note","") + "</span>" if s.get("note") else ""}'
-        f'</div>'
-        for i, s in enumerate(segments)
-    )
+    # 사업부 범례 HTML (Python 3.11 f-string 내 백슬래시 금지 → 루프로 분리)
+    seg_legend_html = ""
+    for i, s in enumerate(segments):
+        color = seg_colors[i % len(seg_colors)]
+        note_text = s.get("note", "")
+        note_span = ('<span style="color:#888">— ' + note_text + '</span>') if note_text else ""
+        seg_legend_html += (
+            f'<div>'
+            f'<span class="seg-dot" style="background:{color}"></span>'
+            f'<b>{s.get("name","")}</b> {s.get("pct",0)}%{note_span}'
+            f'</div>'
+        )
 
     rec = analysis.get("recommendation", {})
     opinion = rec.get("opinion", "중립")
@@ -627,6 +631,7 @@ def git_push(company_name, *filepaths):
         if "nothing to commit" in result.stdout:
             print("[Git] 변경사항 없음", flush=True)
         else:
+            subprocess.run(["git", "pull", "--rebase", "origin", "master"], check=True)
             subprocess.run(["git", "push"], check=True)
             print("[Git] 푸시 완료", flush=True)
     except subprocess.CalledProcessError as e:
