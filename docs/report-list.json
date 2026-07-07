@@ -3,6 +3,17 @@
   "reports": [
     {
       "type": "기업분석",
+      "title": "SK하이닉스",
+      "file": "reports/SK하이닉스.html",
+      "date": "2026.07.07",
+      "opinion": "매수",
+      "summary": "SK하이닉스, 현재가 미수집 / HBM3E 초격차 기술력 기반 AI 메모리 수요 수혜 극대화 전망",
+      "buy_pct": 70,
+      "hold_pct": 22,
+      "sell_pct": 8
+    },
+    {
+      "type": "기업분석",
       "title": "오로라",
       "file": "reports/오로라.html",
       "date": "2026.07.07",

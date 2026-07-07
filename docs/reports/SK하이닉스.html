@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SK하이닉스 기업분석 · 2026.07.07</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px;line-height:1.75}
@@ -70,7 +71,17 @@ ul.nl li:last-child{border-bottom:none}
 
 .footer{text-align:center;font-size:11px;color:#aaa;padding:20px 0 4px}
 
-@media(max-width:600px){.swot,.two{grid-template-columns:1fr}.hd-top{flex-direction:column}}
+.fin-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px;overflow-x:auto;display:block}
+.fin-tbl th,.fin-tbl td{padding:7px 10px;text-align:right;border-bottom:1px solid #f2f2f2;white-space:nowrap}
+.fin-tbl th{background:#f8f9fb;font-weight:700;color:#555;text-align:center}
+.fin-tbl td:first-child,.fin-tbl th:first-child{text-align:left;min-width:120px}
+.fin-tbl tr:last-child td{border-bottom:none}
+.fin-chart-wrap{height:220px;margin-top:16px;position:relative}
+.seg-wrap{display:flex;gap:20px;align-items:center;height:220px}
+.seg-chart-box{flex:0 0 200px;height:200px}
+.seg-legend{flex:1;font-size:12px;line-height:2}
+.seg-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+@media(max-width:600px){.swot,.two{grid-template-columns:1fr}.hd-top{flex-direction:column}.seg-wrap{flex-direction:column;height:auto}.seg-chart-box{flex:none;width:100%}}
 </style>
 </head>
 <body>
@@ -88,24 +99,23 @@ ul.nl li:last-child{border-bottom:none}
       <div class="hd-dt">2026.07.07 기준</div>
     </div>
   </div>
-  <div class="hd-sum">SK하이닉스 | 현재가 데이터 미수집 | HBM 초격차 기술력 기반 AI 반도체 수혜 최대 수혜주</div>
+  <div class="hd-sum">SK하이닉스, 현재가 미수집 / HBM3E 초격차 기술력 기반 AI 메모리 수요 수혜 극대화 전망</div>
 </div>
 
 <div class="chart-wrap">
-  <div class="cl-label">Price Chart</div>
-  <div class="tradingview-widget-container" style="height:420px">
-    <div id="tv_chart" style="height:400px"></div>
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-    new TradingView.widget({
-      "autosize":true,"symbol":"KRX:000660","interval":"D",
-      "timezone":"Asia/Seoul","theme":"light","style":"1","locale":"kr",
-      "toolbar_bg":"#f8f9fb","enable_publishing":false,"allow_symbol_change":false,
-      "container_id":"tv_chart","hide_side_toolbar":false,
-      "studies":["MASimple@tv-basicstudies","Volume@tv-basicstudies"]
-    });
-    </script>
-  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="cl-label">Price Chart · KRX:000660</span><div style="display:flex;gap:12px;font-size:12px"><a href="https://finance.naver.com/item/chart.naver?code=000660" target="_blank" style="color:#1a73e8;font-weight:600">네이버 차트</a><a href="https://www.tradingview.com/chart/?symbol=KRX:000660" target="_blank" style="color:#888">TradingView</a></div></div>
+  <div class="tradingview-widget-container" style="height:460px;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div><script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+    {
+      "autosize": true,
+      "symbol": "KRX:000660",
+      "interval": "W",
+      "timezone": "Asia/Seoul",
+      "theme": "light",
+      "style": "1",
+      "locale": "kr",
+      "allow_symbol_change": true
+    }
+</script></div><div id="tv-fallback" style="display:none;text-align:center;padding:20px 0;color:#888;font-size:13px">TradingView에서 지원하지 않는 종목입니다. <a href="https://finance.naver.com/item/chart.naver?code=000660" target="_blank" style="color:#1a73e8;font-weight:600">네이버 금융에서 차트 보기 →</a></div><script>setTimeout(function(){var w=document.querySelector(".tradingview-widget-container__widget");var f=w&&w.querySelector("iframe");if(!f||!f.src){document.getElementById("tv-fallback").style.display="block";}},5000);</script>
 </div>
 
 <div class="op-card">
@@ -119,58 +129,72 @@ ul.nl li:last-child{border-bottom:none}
     <span><span class="dot d-hold"></span>중립 <b class="pv">22%</b></span>
     <span><span class="dot d-sell"></span>매도 <b class="pv">8%</b></span>
   </div>
-  <ul class="cl" style="margin-top:12px"><li>HBM3E 12단 양산 본격화로 엔비디아 H200·B200 공급 독점적 지위 확보</li><li>2025~2026년 HBM 수요 급증으로 ASP 상승 및 영업이익률 30%대 회복 전망</li><li>DDR5·LPDDR5X 등 고부가 D램 믹스 개선으로 수익성 구조적 개선 지속</li></ul>
+  <ul class="cl" style="margin-top:12px"><li>HBM3E 12단 엔비디아 독점 공급 지위 유지 및 HBM4 선행 개발 가속화</li><li>2025~2026년 AI 서버 투자 사이클 본격화로 HBM·DDR5 수요 구조적 확대 전망</li><li>2024년 연간 영업이익 23조원 이상 달성 이후 2025~2026년 추가 성장 궤도 진입 기대</li></ul>
 </div>
 
 <div class="card">
   <div class="ct">핵심 투자포인트</div>
-  <ul class="nl"><li><span class="num">01</span>AI 인프라 투자 폭증에 따른 HBM 수요 중장기 구조적 성장 수혜 최우선 수혜주</li><li><span class="num">02</span>HBM4(6세대) 개발 선행으로 2026~2027년 차세대 제품 공급 주도권 확보 기대</li><li><span class="num">03</span>엔비디아·AMD·구글·MS 등 빅테크 전방 고객사 다변화로 매출 안정성 확보</li><li><span class="num">04</span>용인 반도체 클러스터 장기 Capa 투자로 공급 부족 국면에서의 시장 지위 강화 전망</li></ul>
+  <ul class="nl"><li><span class="num">01</span>AI 가속기 수요 폭증으로 HBM 공급 부족 구조 2026년까지 지속, 독점적 수혜 집중</li><li><span class="num">02</span>HBM4 세대 전환 시 기술 리더십 유지 여부가 밸류에이션 프리미엄 핵심 결정 요인</li><li><span class="num">03</span>미국·유럽 현지 팹 투자를 통한 지정학적 리스크 헤지 및 고객사 공급망 다변화 전략 강화</li><li><span class="num">04</span>DDR5·LPDDR5X 서버·온디바이스 AI 수요 확대로 DRAM 평균 ASP 구조적 상승 전망</li></ul>
 </div>
 
 <div class="card">
   <div class="ct">기업 개요</div>
   <div class="sub">A. 사업 내용</div>
-  <ul class="cl"><li>D램·낸드플래시 중심 메모리 반도체 설계·제조·판매 전문 기업</li><li>HBM(고대역폭메모리) 세계 1위, D램 세계 2위, 낸드 세계 3위 위치</li><li>AI 가속기용 HBM 및 엔터프라이즈 SSD 고성능 제품군으로 포트폴리오 전환 가속</li></ul>
+  <ul class="cl"><li>DRAM·NAND Flash 설계·제조·판매 중심의 글로벌 종합 메모리 반도체 기업</li><li>HBM(High Bandwidth Memory), DDR5, LPDDR5X, eSSD 등 고부가 제품 포트폴리오 보유</li><li>이천·청주 국내 팹 및 미국 인디애나 신규 팹(2028년 양산 목표) 글로벌 생산 체계 구축 중</li></ul>
   <div class="sub">B. 시장 지위</div>
-  <ul class="cl"><li>HBM 시장 점유율 약 50% 이상, 엔비디아 핵심 공급사로서 독보적 위치</li><li>삼성전자·마이크론 대비 HBM 기술 선행 우위 및 고객 신뢰도 압도적 우세</li></ul>
+  <ul class="cl"><li>글로벌 DRAM 시장 점유율 약 30~33% (삼성전자·마이크론과 3강 구도), HBM 시장 50%+ 압도적 1위</li><li>엔비디아 H100/H200/B200 GPU에 HBM3E 독점 공급 지위 확보로 AI 인프라 핵심 파트너 위상</li></ul>
   <div class="sub">C. 최근 주요 이슈</div>
-  <ul class="cl"><li>HBM3E 12단 제품 엔비디아 GB200 공급 확대로 2026년 HBM 매출 비중 40% 이상 전망</li><li>청주 M15X 및 용인 클러스터 투자 지속으로 HBM·DDR5 생산 Capa 확대 집중</li><li>AI 데이터센터 투자 사이클 지속에 따른 HBM 장기 수주 잔고 확대 기대</li></ul>
+  <ul class="cl"><li>HBM3E 12단 양산 본격화 및 HBM4(2026년 하반기 양산 목표) 개발 일정 순항 중</li><li>2025년 미국 인디애나 팹 착공 확정, 미국 정부 반도체법(CHIPS Act) 보조금 협의 진행 상황</li><li>2026년 AI 메모리 수요 급증으로 HBM 공급 타이트 지속, ASP 강세 및 수익성 개선 기대</li></ul>
 </div>
 
 <div class="card">
   <div class="ct">재무 분석</div>
   <div class="sub">A. 핵심 지표</div>
-  <ul class="cl"><li>2025년 연간 매출액: 약 75~80조 원 (전년 대비 +40% 이상 성장) 전망</li><li>2025년 영업이익: 약 25~30조 원, 영업이익률 33~37% 수준 회복 전망</li><li>PER(2025E): 약 10~13배 수준, 반도체 사이클 고려 시 밸류에이션 매력 상존</li><li>PBR: 약 1.5~2.0배 수준, 자산가치 대비 적정 수준 평가</li><li>부채비율: 약 60~70% 수준, 재무 건전성 안정적 유지 상황</li></ul>
+  <ul class="cl"><li>매출(2025E): 약 75~80조원 / 전년대비 +30%+ 성장 전망</li><li>영업이익(2025E): 약 28~33조원 / 영업이익률 37~42% 수준 전망</li><li>HBM 매출 비중: DRAM 매출의 40%+ 돌파 전망, 수익성 견인 핵심 동력</li><li>PER(2025E): 약 8~11배 / 글로벌 반도체 피어 대비 저평가 구간 인식</li><li>부채비율: 약 40~50% 수준, 대규모 CapEx 투자에도 재무건전성 양호 유지 상황</li></ul>
   <div class="sub">B. 매출 트렌드</div>
-  <ul class="cl"><li>2023년 하반기 반도체 업황 반등 이후 2024~2026년 연속 매출 성장 트렌드 지속</li><li>HBM 매출 비중 확대로 단순 D램 의존도 축소, 고부가 제품 중심 구조 전환 진행 중</li><li>낸드 부문 수급 불안정 구간에서도 D램·HBM 호황으로 전체 매출 방어 기대</li></ul>
+  <ul class="cl"><li>2023년 연간 매출 32.8조원(적자) → 2024년 66.2조원(흑자전환) → 2025~2026년 지속 성장 궤도</li><li>DRAM 가격 회복 + HBM 프리미엄 ASP 효과 동시 반영으로 매출 질적 개선 지속</li><li>NAND 부문 업황 회복 지연 우려 존재하나 DRAM·HBM 강세가 전체 실적 압도적 견인 구조</li></ul>
   <div class="sub">C. 수익성</div>
-  <ul class="cl"><li>HBM ASP(평균판매단가) 일반 D램 대비 5~8배 수준으로 수익성 구조적 개선 견인</li><li>원가 절감 및 공정 미세화(1b nm 이하)로 D램 부문 원가 경쟁력 강화 지속</li><li>낸드 적자 구조 개선 더딘 점은 단기 수익성 부담 요인이나 전체 영업이익 영향 제한적</li></ul>
+  <ul class="cl"><li>HBM3E 고마진 제품 믹스 개선으로 DRAM 부문 영업이익률 50%+ 달성 전망</li><li>NAND 부문 적자폭 축소 및 손익분기점 근접 예상, 전사 수익성 추가 개선 기대</li><li>R&D 비용 확대(HBM4·PIM 개발)에도 고부가 제품 비중 확대로 원가 구조 개선 지속</li></ul>
+</div>
+
+<div class="card">
+  <div class="ct">5개년 재무 현황 (연간, 억원)</div>
+  <p style="color:#aaa;font-size:12px;padding:6px 0">재무 데이터를 가져오지 못했습니다.</p>
+  <div class="fin-chart-wrap"><canvas id="finChart"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="ct">사업부별 매출 비중</div>
+  <div class="seg-wrap">
+    <div class="seg-chart-box"><canvas id="segChart"></canvas></div>
+    <div class="seg-legend"><div><span class="seg-dot" style="background:#1a73e8"></span><b>DRAM (HBM 포함)</b> 72%<span style="color:#888">— HBM3E 비중 급증, 전체 이익의 90%+ 창출 핵심 사업부</span></div><div><span class="seg-dot" style="background:#34a853"></span><b>NAND Flash / eSSD</b> 24%<span style="color:#888">— 기업용 eSSD 회복 중이나 전반적 업황 부진 지속 상황</span></div><div><span class="seg-dot" style="background:#f29900"></span><b>기타 (CIS·파운드리 등)</b> 4%<span style="color:#888">— 비메모리 부문 소규모 유지, 전략적 비중 확대 검토 중</span></div></div>
+  </div>
 </div>
 
 <div class="card">
   <div class="ct">SWOT 분석</div>
   <div class="swot">
-    <div class="sb s"><div class="sl">S · Strength</div><div class="si">∙ HBM 세계 최고 기술력 및 양산 수율 경쟁사 대비 압도적 우위</div><div class="si">∙ 엔비디아와의 긴밀한 협업 체계로 차세대 제품 공동 개발 및 독점 공급 구조</div><div class="si">∙ 1b·1c nm 공정 전환 가속으로 원가 경쟁력 및 성능 동시 개선 진행</div></div>
-    <div class="sb w"><div class="sl">W · Weakness</div><div class="si">∙ 낸드플래시 부문 수익성 회복 지연으로 전체 이익 개선 속도 제약 상황</div><div class="si">∙ D램·HBM 편중 매출 구조로 메모리 업황 사이클 변동성에 여전히 노출</div></div>
-    <div class="sb o"><div class="sl">O · Opportunity</div><div class="si">∙ 생성형 AI·LLM 고도화에 따른 HBM 탑재 용량 지속 증가 트렌드 수혜</div><div class="si">∙ 온디바이스 AI 확산으로 모바일향 LPDDR5X·HBM-lite 신수요 창출 기대</div><div class="si">∙ 차량용 반도체·산업용 메모리 등 비메모리 인접 시장 확장 기회 모색</div></div>
-    <div class="sb t"><div class="sl">T · Threat</div><div class="si">∙ 삼성전자 HBM3E 품질 개선 및 마이크론 HBM3E 공급 확대 시 경쟁 심화 우려</div><div class="si">∙ 미·중 반도체 규제 강화 및 지정학적 리스크로 중국향 수출 제한 가능성 압박</div></div>
+    <div class="sb s"><div class="sl">S · Strength</div><div class="si">∙ HBM 시장 50%+ 점유율 및 엔비디아 독점 공급 파트너십 확보로 경쟁 우위 압도적</div><div class="si">∙ TSV(Through Silicon Via) 적층 기술 및 1b nm 공정 양산 기술력 세계 최고 수준</div><div class="si">∙ SK그룹 계열사 시너지(SKT AI, SK온 등) 및 안정적 자금 조달 구조</div></div>
+    <div class="sb w"><div class="sl">W · Weakness</div><div class="si">∙ NAND 사업부 경쟁력이 삼성전자·키옥시아 대비 상대적 열위, 수익성 개선 속도 지연 우려</div><div class="si">∙ HBM 매출 집중도 심화로 엔비디아 의존도 과도, 고객 다변화 과제 상존</div></div>
+    <div class="sb o"><div class="sl">O · Opportunity</div><div class="si">∙ AI 데이터센터 HBM 수요 2026~2028년 연평균 50%+ 성장 전망, 수혜 지속 기대</div><div class="si">∙ 온디바이스 AI 확산으로 LPDDR5X·PIM(Processing-In-Memory) 신규 수요 창출 가속화</div><div class="si">∙ 미국 CHIPS Act 보조금 수혜 및 현지 생산 체계 구축으로 글로벌 공급망 재편 수혜 전망</div></div>
+    <div class="sb t"><div class="sl">T · Threat</div><div class="si">∙ 삼성전자 HBM4 기술 추격 가속화 및 마이크론 HBM3E 공급 확대로 경쟁 심화 우려</div><div class="si">∙ 미·중 반도체 규제 확대 시 중국 매출 제한 및 글로벌 공급망 불확실성 압박</div></div>
   </div>
 </div>
 
 <div class="two">
   <div class="bull">
     <div class="bt">긍정적 시나리오 (Bull Case)</div>
-    <div class="bi">∙ HBM4 독점 공급 시나리오 실현 시 목표주가 270,000원 이상 상향 가능 기대</div><div class="bi">∙ AI 데이터센터 투자 가속화로 HBM 연간 수요 50% 이상 증가 시 실적 서프라이즈 전망</div><div class="bi">∙ 낸드 부문 흑자 전환 + D램 ASP 동반 상승 시 영업이익률 40% 이상 달성 가능 기대</div><div class="bi">∙ 용인 클러스터 조기 가동 및 HBM Capa 조기 확보 시 점유율 55% 이상 유지 전망</div>
+    <div class="bi">∙ HBM4 양산 성공 및 엔비디아 블랙웰 차세대 GPU 독점 공급 유지 시 목표주가 260,000원+ 상향 가능</div><div class="bi">∙ AI 서버 투자 사이클 2027년 이후에도 지속될 경우 HBM 공급 타이트 구조 장기화, 초과 이익 지속</div><div class="bi">∙ NAND 업황 반등 시 전사 영업이익률 45%+ 달성, 추가 밸류에이션 리레이팅 기대</div><div class="bi">∙ PIM·CXL 메모리 등 차세대 AI 메모리 솔루션 선제 상용화 시 새로운 성장 동력 확보</div>
   </div>
   <div class="bear">
     <div class="bt">리스크 요인 (Risk)</div>
-    <div class="bi">∙ 글로벌 경기 침체 심화 시 AI 투자 축소로 HBM 수요 급감 가능성 우려</div><div class="bi">∙ 삼성·마이크론의 HBM 수율 개선 속도 예상 초과 시 점유율 하락 압박</div><div class="bi">∙ 미국의 대중 반도체 장비·기술 수출 통제 강화로 생산 차질 및 비용 상승 리스크</div><div class="bi">∙ 원/달러 환율 급락(원화 강세) 시 수출 매출 환산 감소로 실적 하향 조정 압박</div>
+    <div class="bi">∙ 삼성전자·마이크론 HBM 공급 확대로 HBM 과잉공급 전환 시 ASP 급락 우려</div><div class="bi">∙ 엔비디아 GPU 수요 둔화 또는 AMD·인텔 경쟁 심화로 HBM 주문 감소 리스크</div><div class="bi">∙ 미국의 대중국 반도체 수출 규제 강화로 중국 스마트폰·PC 고객사 매출 제한 압박</div><div class="bi">∙ 원화 강세 지속 시 달러 기반 매출의 원화 환산 수익성 감소 및 실적 하향 압박</div>
   </div>
 </div>
 
 <div class="card">
   <div class="ct">최종 결론</div>
-  <ul class="nl"><li><span class="num">01</span>SK하이닉스는 AI 반도체 핵심 소재인 HBM 시장의 압도적 1위 사업자로 중장기 성장 모멘텀 최우선 보유</li><li><span class="num">02</span>단기 낸드 부진 및 경쟁 심화 우려에도 불구, HBM 수익성 레버리지 효과로 2026년 역대 최대 실적 경신 전망</li><li><span class="num">03</span>AI 인프라 투자 사이클의 수혜를 가장 직접적으로 받는 국내 최고 반도체 기업으로 중장기 매수 의견 유지</li></ul>
+  <ul class="nl"><li><span class="num">01</span>SK하이닉스는 HBM 초격차 기술 리더십을 바탕으로 AI 메모리 수요 사이클 최대 수혜 기업으로서의 위상 공고화</li><li><span class="num">02</span>2026년 HBM4 양산 전환 및 미국 현지 팹 투자 가시화로 중장기 성장 스토리 구조적 강화 전망</li><li><span class="num">03</span>단기 주가 변동성 대응 필요하나 12개월 목표주가 220,000~260,000원 제시, 중장기 매수 관점 유효</li></ul>
   <div class="conc">
     <div class="cv"><label>투자의견</label><b style="color:#1a73e8">매수</b></div>
     <div class="cv"><label>목표주가</label><b>220,000~260,000원</b></div>
@@ -184,5 +208,59 @@ ul.nl li:last-child{border-bottom:none}
 </div>
 
 </div>
+
+<script>
+const finYears   = [];
+const finRevenue = [];
+const finOpIncome= [];
+const finNetIncome=[];
+const segLabels  = ["DRAM (HBM \ud3ec\ud568)", "NAND Flash / eSSD", "\uae30\ud0c0 (CIS\u00b7\ud30c\uc6b4\ub4dc\ub9ac \ub4f1)"];
+const segPcts    = [72, 24, 4];
+const segNotes   = ["HBM3E \ube44\uc911 \uae09\uc99d, \uc804\uccb4 \uc774\uc775\uc758 90%+ \ucc3d\ucd9c \ud575\uc2ec \uc0ac\uc5c5\ubd80", "\uae30\uc5c5\uc6a9 eSSD \ud68c\ubcf5 \uc911\uc774\ub098 \uc804\ubc18\uc801 \uc5c5\ud669 \ubd80\uc9c4 \uc9c0\uc18d \uc0c1\ud669", "\ube44\uba54\ubaa8\ub9ac \ubd80\ubb38 \uc18c\uaddc\ubaa8 \uc720\uc9c0, \uc804\ub7b5\uc801 \ube44\uc911 \ud655\ub300 \uac80\ud1a0 \uc911"];
+
+document.addEventListener('DOMContentLoaded', function() {
+  // ── 5개년 재무 차트 ──────────────────────────────
+  const finEl = document.getElementById('finChart');
+  if (finEl && finYears.length > 0) {
+    new Chart(finEl, {
+      data: {
+        labels: finYears,
+        datasets: [
+          { type:'bar', label:'매출액', data:finRevenue,   backgroundColor:'#1a73e830', borderColor:'#1a73e8', borderWidth:2, yAxisID:'y' },
+          { type:'bar', label:'영업이익', data:finOpIncome, backgroundColor:'#f2990030', borderColor:'#f29900', borderWidth:2, yAxisID:'y' },
+          { type:'line', label:'순이익', data:finNetIncome, borderColor:'#34a853', backgroundColor:'#34a85318', borderWidth:2, pointRadius:4, fill:true, tension:0.3, yAxisID:'y' }
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ position:'top', labels:{ font:{ size:11 } } },
+          tooltip:{ callbacks:{ label:c => `${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toLocaleString() : '-'}억원` } }
+        },
+        scales:{ y:{ ticks:{ callback:v => v>=10000 ? `${(v/10000).toFixed(0)}조` : `${v.toLocaleString()}억` }, grid:{ color:'#f0f0f0' } } }
+      }
+    });
+  }
+
+  // ── 사업부 매출 도넛 차트 ───────────────────────
+  const segEl = document.getElementById('segChart');
+  if (segEl && segLabels.length > 0) {
+    new Chart(segEl, {
+      type:'doughnut',
+      data:{
+        labels:segLabels,
+        datasets:[{ data:segPcts, backgroundColor:['#1a73e8','#34a853','#f29900','#ea4335','#9c27b0','#00bcd4'], borderWidth:2, borderColor:'#fff' }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:c => `${c.label}: ${c.parsed}%${segNotes[c.dataIndex] ? ' ('+segNotes[c.dataIndex]+')' : ''}` } }
+        }
+      }
+    });
+  }
+});
+</script>
 </body>
 </html>
