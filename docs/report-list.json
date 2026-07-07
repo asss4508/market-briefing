@@ -3,6 +3,17 @@
   "reports": [
     {
       "type": "기업분석",
+      "title": "오로라",
+      "file": "reports/오로라.html",
+      "date": "2026.07.07",
+      "opinion": "중립",
+      "summary": "오로라(039830), 현재가 데이터 미수집 / 완구·유아용품 전문기업, 브랜드 다각화 및 해외 수출 확대 기대",
+      "buy_pct": 30,
+      "hold_pct": 50,
+      "sell_pct": 20
+    },
+    {
+      "type": "기업분석",
       "title": "SK하이닉스",
       "file": "reports/SK하이닉스.html",
       "date": "2026.07.07",
@@ -11,17 +22,6 @@
       "buy_pct": 70,
       "hold_pct": 22,
       "sell_pct": 8
-    },
-    {
-      "type": "기업분석",
-      "title": "오로라",
-      "file": "reports/오로라.html",
-      "date": "2026.07.07",
-      "opinion": "중립",
-      "summary": "오로라(039830), 현재가 미확인, 완구·유아용품 전문기업으로 내수 소비 회복 기대 속 실적 개선 전망",
-      "buy_pct": 30,
-      "hold_pct": 50,
-      "sell_pct": 20
     }
   ]
 }
