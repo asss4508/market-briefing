@@ -321,6 +321,54 @@ def build_html(company_name, stock_code, analysis, stock_data, financial_history
     op_color = {"매수": "#1a73e8", "중립": "#f29900", "매도": "#d93025"}.get(opinion, "#f29900")
     op_bg = {"매수": "#e8f0fe", "중립": "#fef7e0", "매도": "#fce8e6"}.get(opinion, "#fef7e0")
 
+    # 차트 섹션 (f-string 내 백슬래시 금지 → 미리 조립)
+    naver_url = f"https://finance.naver.com/item/chart.naver?code={stock_code}" if stock_code else "https://finance.naver.com"
+    tv_url = f"https://www.tradingview.com/chart/?symbol=KRX:{stock_code}" if stock_code else "https://www.tradingview.com"
+    code_label = f"KRX:{stock_code}" if stock_code else "종목코드 없음"
+
+    chart_header_html = (
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        f'<span class="cl-label">Price Chart · {code_label}</span>'
+        '<div style="display:flex;gap:12px;font-size:12px">'
+        f'<a href="{naver_url}" target="_blank" style="color:#1a73e8;font-weight:600">네이버 차트</a>'
+        f'<a href="{tv_url}" target="_blank" style="color:#888">TradingView</a>'
+        '</div></div>'
+    )
+    if stock_code:
+        chart_body_html = (
+            '<div class="tradingview-widget-container" style="height:460px;width:100%">'
+            '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>'
+            '<script type="text/javascript"'
+            ' src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>'
+            '\n    {\n'
+            '      "autosize": true,\n'
+            f'      "symbol": "KRX:{stock_code}",\n'
+            '      "interval": "W",\n'
+            '      "timezone": "Asia/Seoul",\n'
+            '      "theme": "light",\n'
+            '      "style": "1",\n'
+            '      "locale": "kr",\n'
+            '      "allow_symbol_change": true\n'
+            '    }\n'
+            '</script></div>'
+            '<div id="tv-fallback" style="display:none;text-align:center;padding:20px 0;color:#888;font-size:13px">'
+            'TradingView에서 지원하지 않는 종목입니다. '
+            f'<a href="{naver_url}" target="_blank" style="color:#1a73e8;font-weight:600">네이버 금융에서 차트 보기 →</a>'
+            '</div>'
+            '<script>setTimeout(function(){'
+            'var w=document.querySelector(".tradingview-widget-container__widget");'
+            'var f=w&&w.querySelector("iframe");'
+            'if(!f||!f.src){document.getElementById("tv-fallback").style.display="block";}'
+            '},5000);</script>'
+        )
+    else:
+        chart_body_html = (
+            '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px">'
+            '종목코드를 확인할 수 없습니다. '
+            '<a href="https://finance.naver.com" target="_blank" style="color:#1a73e8">네이버 금융에서 확인</a>'
+            '</div>'
+        )
+
     def li_clean(items):
         return "".join(f'<li>{i}</li>' for i in (items or []))
 
@@ -445,27 +493,8 @@ ul.nl li:last-child{{border-bottom:none}}
 </div>
 
 <div class="chart-wrap">
-  <div class="cl-label">Price Chart · KRX:{stock_code}</div>
-  <div class="tradingview-widget-container" style="height:460px;width:100%">
-    <div class="tradingview-widget-container__widget" style="height:calc(100% - 28px);width:100%"></div>
-    <div style="font-size:11px;color:#aaa;padding-top:4px;text-align:right">
-      <a href="https://www.tradingview.com/" target="_blank" rel="noopener" style="color:#aaa">TradingView</a>
-    </div>
-    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-    {{
-      "autosize": true,
-      "symbol": "KRX:{stock_code}",
-      "interval": "W",
-      "timezone": "Asia/Seoul",
-      "theme": "light",
-      "style": "1",
-      "locale": "kr",
-      "allow_symbol_change": true,
-      "calendar": false,
-      "hide_top_toolbar": false
-    }}
-    </script>
-  </div>
+  {chart_header_html}
+  {chart_body_html}
 </div>
 
 <div class="op-card">
