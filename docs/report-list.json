@@ -1,4 +1,16 @@
 {
-  "updated": "",
-  "reports": []
+  "updated": "2026.07.07",
+  "reports": [
+    {
+      "type": "기업분석",
+      "title": "오로라",
+      "file": "reports/오로라.html",
+      "date": "2026.07.07",
+      "opinion": "중립",
+      "summary": "오로라(039830), 현재가 미확인, 완구·유아용품 전문기업으로 내수 소비 회복 기대 속 실적 개선 전망",
+      "buy_pct": 30,
+      "hold_pct": 50,
+      "sell_pct": 20
+    }
+  ]
 }
