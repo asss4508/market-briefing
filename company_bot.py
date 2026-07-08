@@ -83,8 +83,8 @@ async def main():
 
     log("메시지 대기 중... (Ctrl+C로 종료)")
 
-    # 5시간 30분 후 자동 종료 (GitHub Actions 6시간 제한 여유)
-    await asyncio.sleep(5.5 * 3600)
+    # 5시간 55분 후 자동 종료 (GitHub Actions 6시간 제한 여유, 다음 스케줄과 이어지도록)
+    await asyncio.sleep(5 * 3600 + 55 * 60)
 
     # 실행 중인 분석 완료 대기
     if running_tasks:
