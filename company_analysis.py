@@ -336,7 +336,7 @@ def build_html(company_name, stock_code, analysis, stock_data, financial_history
     )
     if stock_code:
         chart_body_html = (
-            '<div class="tradingview-widget-container" style="height:460px;width:100%">'
+            '<div class="tradingview-widget-container tv-chart" style="width:100%">'
             '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>'
             '<script type="text/javascript"'
             ' src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>'
@@ -471,7 +471,8 @@ ul.nl li:last-child{{border-bottom:none}}
 .seg-chart-box{{flex:0 0 200px;height:200px}}
 .seg-legend{{flex:1;font-size:12px;line-height:2}}
 .seg-dot{{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}}
-@media(max-width:600px){{.swot,.two{{grid-template-columns:1fr}}.hd-top{{flex-direction:column}}.seg-wrap{{flex-direction:column;height:auto}}.seg-chart-box{{flex:none;width:100%}}}}
+.tv-chart{{height:600px}}
+@media(max-width:600px){{.swot,.two{{grid-template-columns:1fr}}.hd-top{{flex-direction:column}}.seg-wrap{{flex-direction:column;height:auto}}.seg-chart-box{{flex:none;width:100%}}.tv-chart{{height:420px}}}}
 </style>
 </head>
 <body>
@@ -700,6 +701,7 @@ def update_report_list(official_name, safe_name, date_str, analysis, report_type
         "buy_pct":  rec.get("buy_pct", 0),
         "hold_pct": rec.get("hold_pct", 0),
         "sell_pct": rec.get("sell_pct", 0),
+        "generated_at": datetime.now(timezone.utc).timestamp(),
     }
     existing["reports"] = [r for r in existing["reports"] if r.get("title") != official_name]
     existing["reports"].insert(0, entry)
@@ -707,6 +709,28 @@ def update_report_list(official_name, safe_name, date_str, analysis, report_type
     list_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[리포트목록] {list_path} 업데이트", flush=True)
     return list_path
+
+
+def recently_generated(official_name, threshold_sec=180):
+    """같은 종목이 최근에 이미 분석됐는지 확인.
+    즉시감지 봇과 폴링이 같은 텔레그램 메시지를 동시에 감지해 각자 다른 목표주가를
+    독립 생성/커밋하는 중복 실행을 막기 위함 (텔레그램-사이트 목표주가 불일치 원인).
+    """
+    subprocess.run(["git", "pull", "--rebase", "origin", "master"], check=False,
+                   capture_output=True)
+    list_path = Path("docs/report-list.json")
+    if not list_path.exists():
+        return False
+    try:
+        existing = json.loads(list_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    for r in existing.get("reports", []):
+        if r.get("title") == official_name:
+            ts = r.get("generated_at")
+            if ts and (datetime.now(timezone.utc).timestamp() - ts) < threshold_sec:
+                return True
+    return False
 
 
 # ─── 메인 ────────────────────────────────────────────────────
@@ -718,6 +742,11 @@ def main(company_name):
 
     # 1. 종목코드 (실패해도 Claude 지식 기반으로 계속 진행)
     code, official_name = find_stock_code(company_name)
+
+    # 1-1. 중복 실행 방지 (즉시감지 봇 + 폴링이 같은 요청을 동시에 감지하는 경우)
+    if recently_generated(official_name):
+        print(f"[중복방지] '{official_name}' 최근 분석과 중복 - 실행 건너뜀", flush=True)
+        return
 
     # 2. 주가 데이터
     print("주가 데이터 수집 중...", flush=True)
