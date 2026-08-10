@@ -137,27 +137,43 @@ def get_world_indices():
 
 
 def get_financial_news():
+    """네이버 금융/연합뉴스에서 헤드라인 수집.
+
+    예전 셀렉터(a.title, .news-tit a 등)와 news_list.nhn 구주소가
+    사이트 개편으로 더 이상 안 맞아 계속 0건이 나오고 있었음. 실제
+    현재 마크업 기준으로 다시 확인한 셀렉터로 교체.
+    """
     headlines = []
-    sources = [
-        ("https://finance.naver.com/news/news_list.nhn?mode=LSS2D&section_id=101&section_id2=258", "euc-kr"),
-        ("https://www.yna.co.kr/economy/all/1", "utf-8"),
-        ("https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=101", "euc-kr"),
-    ]
-    for url, enc in sources:
-        try:
-            res = requests.get(url, headers=HEADERS, timeout=10)
-            res.encoding = enc
-            soup = BeautifulSoup(res.text, "html.parser")
-            for a in soup.select("a.title, .news-tit a, .tit a, h3 a, .hed a"):
-                text = a.text.strip()
-                if text and len(text) > 10 and text not in headlines:
-                    headlines.append(text)
-                if len(headlines) >= 30:
-                    break
-        except Exception as e:
-            print(f"[뉴스] {url[:40]} 오류: {e}")
-        if len(headlines) >= 30:
-            break
+    seen = set()
+
+    try:
+        url = "https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=258"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        res.encoding = "euc-kr"
+        soup = BeautifulSoup(res.text, "html.parser")
+        for a in soup.select("a"):
+            if "article_id" not in a.get("href", ""):
+                continue
+            text = re.sub(r"^\d+", "", a.get_text(strip=True)).strip()
+            if len(text) > 10 and text not in seen:
+                seen.add(text)
+                headlines.append(text)
+    except Exception as e:
+        print(f"[뉴스/네이버금융] 오류: {e}")
+
+    try:
+        url = "https://www.yna.co.kr/economy/all/1"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        res.encoding = "utf-8"
+        soup = BeautifulSoup(res.text, "html.parser")
+        for a in soup.select("a.tit-news"):
+            text = a.get_text(strip=True)
+            if len(text) > 10 and text not in seen:
+                seen.add(text)
+                headlines.append(text)
+    except Exception as e:
+        print(f"[뉴스/연합뉴스] 오류: {e}")
+
     return headlines[:30]
 
 
