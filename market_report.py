@@ -178,25 +178,70 @@ def get_financial_news():
 
 
 def get_economic_calendar():
+    """이번 주 주요 지표(ForexFactory 공개 피드) + 다음 FOMC 회의(연준 공식 캘린더).
+
+    investing.com은 Cloudflare 봇 차단(403)으로 늘 0건이었음. 두 소스 모두
+    별도 인증 없이 접근 가능하고 실제로 응답을 확인한 것들로 교체.
+    """
     events = []
+
     try:
-        url = "https://kr.investing.com/economic-calendar/"
-        res = requests.get(url, headers={**HEADERS, "X-Requested-With": "XMLHttpRequest"}, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
-        for row in soup.select("tr.js-event-item")[:20]:
-            date_el = row.select_one(".date, td:nth-child(1)")
-            event_el = row.select_one(".event, td:nth-child(4)")
-            imp_el = row.select_one(".sentiment, .bull")
-            if event_el:
-                importance = len(imp_el.select("i")) if imp_el else 0
-                if importance >= 2:
-                    events.append({
-                        "date": date_el.text.strip() if date_el else "",
-                        "event": event_el.text.strip(),
-                    })
+        url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        res.raise_for_status()
+        for e in res.json():
+            if e.get("country") != "USD" or e.get("impact") not in ("High", "Medium"):
+                continue
+            try:
+                dt = datetime.fromisoformat(e["date"])
+            except (KeyError, ValueError):
+                continue
+            detail = f"[{e['impact']}] {e['title']}"
+            if e.get("forecast") or e.get("previous"):
+                detail += f" (예상 {e.get('forecast') or '-'}, 이전 {e.get('previous') or '-'})"
+            events.append({"date": dt.strftime("%m/%d(%a)"), "event": detail})
     except Exception as e:
-        print(f"[캘린더] 오류: {e}")
-    return events[:15]
+        print(f"[캘린더/ForexFactory] 오류: {e}")
+
+    try:
+        url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, "html.parser")
+        today = datetime.now(KST).date()
+        upcoming = []
+        for panel in soup.select(".panel-default"):
+            heading = panel.select_one(".panel-heading h4")
+            m = re.search(r"(\d{4})\s+FOMC\s+Meetings", heading.get_text()) if heading else None
+            if not m:
+                continue
+            year = int(m.group(1))
+            for row in panel.select(".fomc-meeting"):
+                month_el = row.select_one(".fomc-meeting__month")
+                date_el = row.select_one(".fomc-meeting__date")
+                if not month_el or not date_el:
+                    continue
+                day_nums = re.findall(r"\d+", date_el.get_text(strip=True))
+                if not day_nums:
+                    continue
+                try:
+                    meeting_date = datetime.strptime(
+                        f"{year} {month_el.get_text(strip=True)} {day_nums[-1]}", "%Y %B %d"
+                    ).date()
+                except ValueError:
+                    continue
+                if meeting_date >= today:
+                    upcoming.append(meeting_date)
+        if upcoming:
+            next_fomc = min(upcoming)
+            events.append({
+                "date": next_fomc.strftime("%Y-%m-%d"),
+                "event": "美 FOMC 정례회의 (연준 공식 캘린더 기준)",
+            })
+    except Exception as e:
+        print(f"[캘린더/FOMC] 오류: {e}")
+
+    return events[:20]
 
 
 # ─── Claude 리포트 생성 ─────────────────────────────────────────
