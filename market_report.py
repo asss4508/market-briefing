@@ -353,6 +353,27 @@ KOSPI/KOSDAQ 수치와 오늘 시장 특징을 아래 형식으로 한 줄씩 5�
     return response.content[0].text.strip()
 
 
+# ─── 데이터 소스 헬스체크 ─────────────────────────────────────────
+
+def check_data_health(indices, rates, commodities, world, news, calendar):
+    """개별 소스가 조용히 0건씩 실패해도 Claude가 그럴듯하게 리포트를 채워버려
+    티가 안 나던 문제(뉴스/캘린더 몇 주간 0건) 재발 방지용. 기대치보다 심하게
+    부족한 항목이 있으면 문자열 목록으로 반환하고, 없으면 빈 리스트."""
+    expected = {
+        "한국 지수": (len(indices), 2),
+        "환율": (len(rates), 5),
+        "원자재/금리": (len(commodities), 5),
+        "글로벌 지수": (len(world), 6),
+        "뉴스": (len(news), 5),
+        "경제 캘린더": (len(calendar), 1),
+    }
+    return [
+        f"{name} {count}건 (최소 {minimum}건 기대)"
+        for name, (count, minimum) in expected.items()
+        if count < minimum
+    ]
+
+
 # ─── 전송 ──────────────────────────────────────────────────────
 
 def send_telegram(message):
@@ -405,8 +426,16 @@ if __name__ == "__main__":
 
     print(f"수집 완료 - 환율:{len(rates)} 원자재:{len(commodities)} 글로벌:{len(world)} 뉴스:{len(news)} 일정:{len(calendar)}")
 
+    health_warnings = check_data_health(indices, rates, commodities, world, news, calendar)
+    if health_warnings:
+        print("데이터 수집 경고: " + " / ".join(health_warnings))
+
     print("Claude 리포트 생성 중...")
     report = generate_report(indices, rates, commodities, world, news, calendar)
+
+    if health_warnings:
+        warn_block = "⚠️ <b>데이터 수집 경고</b>\n" + "\n".join(f"· {w}" for w in health_warnings) + "\n\n"
+        report = warn_block + report
 
     print("=" * 50)
     print(report)
