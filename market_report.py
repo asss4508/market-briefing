@@ -1,5 +1,7 @@
 import os
 import re
+import math
+import time
 import requests
 import anthropic
 from bs4 import BeautifulSoup
@@ -48,27 +50,51 @@ def _fmt(price, change_pct, decimals=2):
 
 # ─── 데이터 수집 ───────────────────────────────────────────────
 
-def get_korean_indices():
+def get_korean_indices(now=None):
+    """Read dated daily closes, never pre-open reset quotes or intraday prices."""
+    now = now or datetime.now(KST)
+    now = now.astimezone(KST)
+    cutoff = now.date() if now.hour >= 16 else now.date() - timedelta(days=1)
     result = {}
-    for code in ["KOSPI", "KOSDAQ"]:
-        try:
-            url = f"https://finance.naver.com/sise/sise_index.nhn?code={code}"
-            res = requests.get(url, headers=HEADERS, timeout=10)
-            res.encoding = "euc-kr"
-            soup = BeautifulSoup(res.text, "html.parser")
-            val = soup.select_one("#now_value")
-            chg = soup.select_one("#change_value")
-            pct = soup.select_one("#change_rate")
-            if val:
+    for code in ("KOSPI", "KOSDAQ"):
+        for attempt in range(3):
+            try:
+                url = f"https://m.stock.naver.com/api/index/{code}/price"
+                res = requests.get(url, headers=HEADERS, timeout=10)
+                res.raise_for_status()
+                rows = res.json()
+                valid = []
+                for row in rows:
+                    traded = datetime.fromisoformat(row["localTradedAt"]).date()
+                    if traded <= cutoff and (cutoff - traded).days <= 7:
+                        valid.append((traded, row))
+                if not valid:
+                    raise ValueError("No recent completed trading session")
+                traded, row = max(valid, key=lambda item: item[0])
+                values = [float(str(row[key]).replace(",", "")) for key in
+                          ("closePrice", "compareToPreviousClosePrice", "fluctuationsRatio")]
+                if not all(math.isfinite(value) for value in values) or values[0] <= 0:
+                    raise ValueError("Invalid index values")
                 result[code] = {
-                    "value": val.text.strip(),
-                    "change": chg.text.strip() if chg else "",
-                    "rate": pct.text.strip() if pct else "",
+                    "value": f"{values[0]:,.2f}", "change": f"{values[1]:+.2f}",
+                    "rate": f"{values[2]:+.2f}%", "date": traded.isoformat(), "source": url,
                 }
-                print(f"[지수] {code}: {result[code]['value']} ({result[code]['rate']})")
-        except Exception as e:
-            print(f"[지수/{code}] 오류: {e}")
+                print(f"[index] {code}: {result[code]}")
+                break
+            except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+                print(f"[index/{code}] attempt {attempt + 1}: {type(exc).__name__}")
+                if attempt < 2:
+                    time.sleep(2)
     return result
+
+
+def validate_korean_indices(indices):
+    if set(indices) != {"KOSPI", "KOSDAQ"}:
+        raise RuntimeError("Both Korean indices are required; report delivery stopped")
+    dates = {item["date"] for item in indices.values()}
+    if len(dates) != 1:
+        raise RuntimeError("Korean index trading dates disagree; report delivery stopped")
+    return datetime.fromisoformat(dates.pop()).date()
 
 
 def get_exchange_rates():
@@ -147,14 +173,13 @@ def get_financial_news():
     seen = set()
 
     try:
-        url = "https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=258"
+        url = "https://news.naver.com/breakingnews/section/101/258"
         res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = "euc-kr"
+        res.raise_for_status()
+        res.encoding = "utf-8"
         soup = BeautifulSoup(res.text, "html.parser")
-        for a in soup.select("a"):
-            if "article_id" not in a.get("href", ""):
-                continue
-            text = re.sub(r"^\d+", "", a.get_text(strip=True)).strip()
+        for a in soup.select("a.sa_text_title"):
+            text = a.get_text(strip=True)
             if len(text) > 10 and text not in seen:
                 seen.add(text)
                 headlines.append(text)
@@ -247,9 +272,10 @@ def get_economic_calendar():
 # ─── Claude 리포트 생성 ─────────────────────────────────────────
 
 def generate_report(indices, rates, commodities, world, news, calendar):
+    report_date = validate_korean_indices(indices)
     now = datetime.now(KST)
-    date_str = now.strftime("%Y년 %m월 %d일")
-    weekday = ["월", "화", "수", "목", "금", "토", "일"][now.weekday()]
+    date_str = report_date.strftime("%Y년 %m월 %d일")
+    weekday = ["월", "화", "수", "목", "금", "토", "일"][report_date.weekday()]
 
     indices_text = "\n".join(
         f"{k}: {v['value']} ({v['change']}, {v['rate']})" for k, v in indices.items()
@@ -266,7 +292,7 @@ def generate_report(indices, rates, commodities, world, news, calendar):
         max_tokens=3000,
         messages=[{
             "role": "user",
-            "content": f"""오늘은 {date_str}({weekday})입니다. 아래 수집된 시장 데이터와 뉴스를 바탕으로 매일 오후 4시 마켓 클로징 리포트를 작성해주세요.
+            "content": f"""한국 시장 종가 기준 거래일은 {date_str}({weekday})입니다. 생성 시각은 {now.isoformat()}입니다. 제목 날짜와 한국 시장 마감은 거래일 기준으로 작성하세요. 아래 수집된 시장 데이터와 뉴스만 바탕으로 마켓 클로징 리포트를 작성해주세요.
 
 === 수집 데이터 ===
 [한국 지수]
@@ -292,13 +318,18 @@ def generate_report(indices, rates, commodities, world, news, calendar):
 📏 분량 및 선별 원칙
 - 총 1500~2500자 내외로 작성
 - 매일 그날 가장 중요한 요소 위주로 선별
-- 데이터가 없는 항목은 추정치나 일반적 맥락으로 보완
+- 데이터가 없는 항목은 '확인 불가'로 표시하거나 생략. 추정치로 보완 금지.
+- 수집 데이터에 없는 지수 방향, 투자자 수급, 업종 등락, 장중 고점, 상승·하락 원인 생성 금지.
+- 뉴스는 제목만 수집한 자료이므로 제목에 없는 계약 조건, 수치, 배경을 덧붙이지 말 것.
+- 금리 예상과 이전 수치는 전망 자료이며 확정 결정이나 인상 기정사실로 표현 금지.
+- 관련주와 수혜·피해 관계는 제공 자료에서 확인된 경우만 포함. 근거 없는 종목 나열 금지.
+- 글로벌 수치는 조회 시점 값이며 해당 거래일의 확정 종가로 단정 금지.
 
 🌏 시장 범위
 - 한국 시장 메인, 글로벌은 핵심만 요약
 
 ✅ 반드시 포함할 내용
-- 주식과 연관된 이슈는 관련주 반드시 제시
+- 주식과 연관된 이슈는 제공 자료에서 확인되는 관련주만 제시
 - 신용거래/반대매매 최근 동향이 있으면 반드시 포함
 - 전쟁/전염병/주요 사회 이슈는 주식 연관 시 포함
 - 새로운 임팩트 기술/산업 이슈가 있으면 포함
@@ -316,8 +347,8 @@ def generate_report(indices, rates, commodities, world, news, calendar):
 <b>📊 마켓 클로징 리포트 | {date_str}({weekday})</b>
 
 <b>🇰🇷 한국 시장 마감</b>
-KOSPI/KOSDAQ 수치와 오늘 시장 특징을 아래 형식으로 한 줄씩 5개 항목으로 작성할 것.
-반드시 번호 형식 "1)" "2)" "3)" "4)" "5)" 을 사용하고, 각 줄은 명사(예: ~흐름, ~지속, ~우세, ~압박, ~마감)로 끝낼 것.
+KOSPI/KOSDAQ 수치와 제공 자료로 확인되는 시장 특징만 최대 5개 항목으로 작성할 것. 근거가 부족하면 항목 수를 줄일 것.
+번호 형식 "1)"부터 사용하고, 각 줄은 명사(예: ~흐름, ~지속, ~우세, ~압박, ~마감)로 끝낼 것.
 줄 바꿈만 하고 항목 사이 빈 줄 없음.
 예시:
 1) KOSPI 2,xxx.xx, KOSDAQ xxx.xx로 보합 마감
@@ -338,14 +369,14 @@ KOSPI/KOSDAQ 수치와 오늘 시장 특징을 아래 형식으로 한 줄씩 5�
 
 <b>🔥 오늘의 핵심 이슈 & 관련주</b>
 당일 가장 임팩트 있는 이슈 2~3개를 ① ② ③ 형식으로 작성.
-각 이슈마다 관련 한국 주식을 반드시 제시할 것.
+각 이슈마다 제공 자료에서 확인되는 관련 한국 주식만 제시할 것.
 각 항목의 마지막 문장은 명사로 끝낼 것.
 
 <b>⚡ 주목할 신기술·산업 동향</b>
 (있는 경우에만 / AI·로봇·에너지·우주·바이오 등)
 
 <b>📅 주요 일정</b>
-(1주일 내 필수 포함: 미국 CPI·PPI·PCE·고용지표·FOMC / 한국금통위·실적발표 / 중요한 것은 다음달까지 / 날짜와 함께 시장 영향도 한 줄 코멘트)
+(수집된 경제 일정에 있는 미래 일정만 포함. 미수집 일정·발언자·예상치를 만들어 넣지 말 것. 출처의 날짜 기준을 유지할 것.)
 
 위 형식에 맞게 완성된 리포트를 작성해주세요. HTML 태그만 사용하고, 마크다운(** 등)은 사용하지 마세요."""
         }]
@@ -408,6 +439,7 @@ if __name__ == "__main__":
 
     print("한국 지수 수집 중...")
     indices = get_korean_indices()
+    validate_korean_indices(indices)
 
     print("환율 수집 중...")
     rates = get_exchange_rates()
