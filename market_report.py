@@ -2,6 +2,7 @@ import os
 import re
 import math
 import time
+import argparse
 import requests
 import anthropic
 from bs4 import BeautifulSoup
@@ -17,6 +18,7 @@ YAHOO_HEADERS = {
     "Accept": "application/json",
 }
 KST = timezone(timedelta(hours=9))
+QUOTE_TIMES = {}
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
@@ -33,6 +35,9 @@ def _yahoo_price(symbol):
     if not result:
         return None, None
     meta = result[0].get("meta", {})
+    timestamp = meta.get("regularMarketTime")
+    if timestamp:
+        QUOTE_TIMES[symbol] = datetime.fromtimestamp(timestamp, KST).strftime("%Y-%m-%d %H:%M KST")
     price = meta.get("regularMarketPrice")
     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
     change_pct = ((price - prev) / prev * 100) if (price and prev and prev != 0) else None
@@ -46,6 +51,10 @@ def _fmt(price, change_pct, decimals=2):
         return base
     sign = "▲" if change_pct >= 0 else "▼"
     return f"{base} ({sign}{abs(change_pct):.2f}%)"
+
+
+def _quote_time(symbol):
+    return f" [시세 기준 {QUOTE_TIMES.get(symbol, '시각 미확인')}]"
 
 
 # ─── 데이터 수집 ───────────────────────────────────────────────
@@ -112,7 +121,7 @@ def get_exchange_rates():
             price, change_pct = _yahoo_price(symbol)
             if price is not None:
                 display = price * multiplier
-                rates[label] = _fmt(display, change_pct)
+                rates[label] = _fmt(display, change_pct) + _quote_time(symbol)
                 print(f"[환율] {label}: {rates[label]}")
         except Exception as e:
             print(f"[환율/{symbol}] 오류: {e}")
@@ -133,7 +142,7 @@ def get_commodities():
         try:
             price, change_pct = _yahoo_price(symbol)
             if price is not None:
-                data[label] = _fmt(price, change_pct)
+                data[label] = _fmt(price, change_pct) + _quote_time(symbol)
                 print(f"[원자재] {label}: {data[label]}")
         except Exception as e:
             print(f"[원자재/{symbol}] 오류: {e}")
@@ -155,14 +164,14 @@ def get_world_indices():
         try:
             price, change_pct = _yahoo_price(symbol)
             if price is not None:
-                data[label] = _fmt(price, change_pct)
+                data[label] = _fmt(price, change_pct) + _quote_time(symbol)
                 print(f"[글로벌] {label}: {data[label]}")
         except Exception as e:
             print(f"[글로벌/{symbol}] 오류: {e}")
     return data
 
 
-def get_financial_news():
+def get_financial_news(mode="korea"):
     """네이버 금융/연합뉴스에서 헤드라인 수집.
 
     예전 셀렉터(a.title, .news-tit a 등)와 news_list.nhn 구주소가
@@ -173,7 +182,8 @@ def get_financial_news():
     seen = set()
 
     try:
-        url = "https://news.naver.com/breakingnews/section/101/258"
+        section = "262" if mode == "global" else "258"
+        url = f"https://news.naver.com/breakingnews/section/101/{section}"
         res = requests.get(url, headers=HEADERS, timeout=10)
         res.raise_for_status()
         res.encoding = "utf-8"
@@ -271,14 +281,35 @@ def get_economic_calendar():
 
 # ─── Claude 리포트 생성 ─────────────────────────────────────────
 
-def generate_report(indices, rates, commodities, world, news, calendar):
-    report_date = validate_korean_indices(indices)
+def generate_report(indices, rates, commodities, world, news, calendar, mode="korea"):
+    if mode not in ("korea", "global"):
+        raise ValueError("Unknown report mode")
     now = datetime.now(KST)
+    if mode == "korea":
+        report_date = validate_korean_indices(indices)
+    else:
+        if not {"S&P 500", "나스닥", "다우존스"}.issubset(world):
+            raise RuntimeError("US index data missing; global report stopped")
+        report_date = now.date()
     date_str = report_date.strftime("%Y년 %m월 %d일")
     weekday = ["월", "화", "수", "목", "금", "토", "일"][report_date.weekday()]
+    title = "🌍 글로벌 모닝 리포트" if mode == "global" else "📊 한국 증시 마감 리포트"
+    scope = ("글로벌 증시 중심. 미국 3대 지수와 해외 주요 시장을 맨 먼저 상세히 다루고, "
+             "금리·달러·원자재·경제 일정을 연결. 한국 시장은 마지막에 확인된 영향만 짧게 요약. "
+             "제목은 한국시간 발행일 기준. 한국 지수가 없으면 한국 시장 수치는 생략."
+             if mode == "global" else
+             "한국 증시 중심. KOSPI·KOSDAQ 종가와 국내 기업·산업 이슈를 우선하고, 글로벌은 핵심만 요약. "
+             "제목은 한국 지수의 실제 거래일 기준. 휴장일에는 직전 거래일 기준임을 명시.")
+    market_section = ("<b>🌍 글로벌 증시 핵심 요약</b>\n"
+                      "미국 3대 지수와 해외 시장 특징을 확인된 데이터만으로 최대 5개 번호 항목으로 작성. "
+                      "거래일 또는 조회 시각을 명시하고 휴장·미확정 종가를 오늘 마감으로 표현하지 말 것."
+                      if mode == "global" else
+                      "<b>🇰🇷 한국 시장 마감</b>\n"
+                      "KOSPI/KOSDAQ 수치와 제공 자료로 확인되는 시장 특징만 최대 5개 번호 항목으로 작성. "
+                      "근거가 부족하면 항목 수를 줄일 것.")
 
     indices_text = "\n".join(
-        f"{k}: {v['value']} ({v['change']}, {v['rate']})" for k, v in indices.items()
+        f"{k}: {v['value']} ({v['change']}, {v['rate']}), 거래일 {v['date']}" for k, v in indices.items()
     ) or "수집 실패"
     rates_text = "\n".join(f"{k}: {v}" for k, v in rates.items()) or "수집 실패"
     commodities_text = "\n".join(f"{k}: {v}" for k, v in commodities.items()) or "수집 실패"
@@ -292,7 +323,9 @@ def generate_report(indices, rates, commodities, world, news, calendar):
         max_tokens=3000,
         messages=[{
             "role": "user",
-            "content": f"""한국 시장 종가 기준 거래일은 {date_str}({weekday})입니다. 생성 시각은 {now.isoformat()}입니다. 제목 날짜와 한국 시장 마감은 거래일 기준으로 작성하세요. 아래 수집된 시장 데이터와 뉴스만 바탕으로 마켓 클로징 리포트를 작성해주세요.
+            "content": f"""리포트 기준일은 {date_str}({weekday})입니다. 생성 시각은 {now.isoformat()}입니다.
+{scope}
+아래 수집된 시장 데이터와 뉴스만 바탕으로 리포트를 작성해주세요.
 
 === 수집 데이터 ===
 [한국 지수]
@@ -324,9 +357,10 @@ def generate_report(indices, rates, commodities, world, news, calendar):
 - 금리 예상과 이전 수치는 전망 자료이며 확정 결정이나 인상 기정사실로 표현 금지.
 - 관련주와 수혜·피해 관계는 제공 자료에서 확인된 경우만 포함. 근거 없는 종목 나열 금지.
 - 글로벌 수치는 조회 시점 값이며 해당 거래일의 확정 종가로 단정 금지.
+- 각 주요 지표의 제공된 시세 기준 시각을 표시. 미국 서머타임 여부와 무관하게 장 마감이 확인되지 않은 값은 잠정치로 표현.
 
 🌏 시장 범위
-- 한국 시장 메인, 글로벌은 핵심만 요약
+- {scope}
 
 ✅ 반드시 포함할 내용
 - 주식과 연관된 이슈는 제공 자료에서 확인되는 관련주만 제시
@@ -344,18 +378,11 @@ def generate_report(indices, rates, commodities, world, news, calendar):
 - 리포트 전체에서 모든 문장을 명사형으로 끝낼 것. 마지막 문장만이 아니라 단락 안의 모든 문장이 명사(또는 명사형 어미 ~상황, ~지속, ~압박, ~행진, ~양상, ~집중, ~우려, ~기대 등)로 끝나야 함. "~입니다" "~있습니다" "~합니다" "~됩니다" 같은 종결어미는 절대 사용 금지.
 
 형식 (Telegram HTML 사용):
-<b>📊 마켓 클로징 리포트 | {date_str}({weekday})</b>
+<b>{title} | {date_str}({weekday})</b>
 
-<b>🇰🇷 한국 시장 마감</b>
-KOSPI/KOSDAQ 수치와 제공 자료로 확인되는 시장 특징만 최대 5개 항목으로 작성할 것. 근거가 부족하면 항목 수를 줄일 것.
+{market_section}
 번호 형식 "1)"부터 사용하고, 각 줄은 명사(예: ~흐름, ~지속, ~우세, ~압박, ~마감)로 끝낼 것.
 줄 바꿈만 하고 항목 사이 빈 줄 없음.
-예시:
-1) KOSPI 2,xxx.xx, KOSDAQ xxx.xx로 보합 마감
-2) 외국인 순매도로 수급 부담 지속
-3) 반도체 대형주 중심 하방 압력 우세
-4) 원/달러 1,5xx원대 고환율 부담 유지
-5) 신용잔고 증가세 속 반대매매 리스크 경계
 
 <b>🌍 글로벌 주요 지표</b>
 아래 항목을 각각 별도 단락으로 작성하고, 단락 사이에 반드시 빈 줄 한 줄을 넣을 것.
@@ -433,13 +460,14 @@ def send_telegram(message):
 
 # ─── 메인 ──────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def main(mode="korea", output=None):
     now = datetime.now(KST)
     print(f"마켓 리포트 생성 시작 ({now.strftime('%Y-%m-%d %H:%M')} KST)")
 
     print("한국 지수 수집 중...")
     indices = get_korean_indices()
-    validate_korean_indices(indices)
+    if mode == "korea":
+        validate_korean_indices(indices)
 
     print("환율 수집 중...")
     rates = get_exchange_rates()
@@ -451,7 +479,7 @@ if __name__ == "__main__":
     world = get_world_indices()
 
     print("뉴스 수집 중...")
-    news = get_financial_news()
+    news = get_financial_news(mode)
 
     print("경제 일정 수집 중...")
     calendar = get_economic_calendar()
@@ -463,7 +491,7 @@ if __name__ == "__main__":
         print("데이터 수집 경고: " + " / ".join(health_warnings))
 
     print("Claude 리포트 생성 중...")
-    report = generate_report(indices, rates, commodities, world, news, calendar)
+    report = generate_report(indices, rates, commodities, world, news, calendar, mode=mode)
 
     if health_warnings:
         warn_block = "⚠️ <b>데이터 수집 경고</b>\n" + "\n".join(f"· {w}" for w in health_warnings) + "\n\n"
@@ -473,4 +501,16 @@ if __name__ == "__main__":
     print(report)
     print("=" * 50)
 
-    send_telegram(report)
+    if output:
+        from pathlib import Path
+        Path(output).write_text(report, encoding="utf-8")
+    else:
+        send_telegram(report)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("korea", "global"), default="korea")
+    parser.add_argument("--output", help="Prepare a report without sending")
+    args = parser.parse_args()
+    main(args.mode, args.output)
