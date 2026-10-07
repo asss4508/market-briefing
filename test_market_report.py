@@ -10,6 +10,17 @@ def row(day='2026-09-14', value='6,684.37', change='-225.54', rate='-3.26'):
     return dict(localTradedAt=day, closePrice=value, compareToPreviousClosePrice=change, fluctuationsRatio=rate)
 
 class ReportTests(unittest.TestCase):
+    def test_telegram_requires_api_confirmation(self):
+        response = Mock()
+        response.json.return_value = {'ok': False}
+        with patch.object(report.requests, 'post', return_value=response):
+            with self.assertRaisesRegex(RuntimeError, 'did not confirm'):
+                report.send_telegram('report')
+        response.json.return_value = {'ok': True}
+        with patch.object(report.requests, 'post', return_value=response) as post:
+            report.send_telegram('report')
+        post.assert_called_once()
+
     def test_global_mode_uses_us_indices_without_requiring_korea(self):
         client = Mock()
         client.messages.create.return_value.content = [Mock(text='global report')]

@@ -1,8 +1,8 @@
 ﻿name: Twice-daily market reports
 on:
   schedule:
-    # Wake early at KST 03-06 / 15-18, then wait for 06:00 / 18:00.
-    - cron: "7,27,47 18-21,6-9 * * *"
+    # Pre-arm from 03:00 / 15:00 KST and retry missed reports all day.
+    - cron: "7,27,47 * * * *"
   workflow_dispatch:
 concurrency:
   group: market-report-delivery

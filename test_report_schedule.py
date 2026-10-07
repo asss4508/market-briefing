@@ -11,18 +11,42 @@ def at(hour, minute=0, day=15):
 
 class ScheduleTests(unittest.TestCase):
     def test_early_wakeup_and_two_independent_slots(self):
+        ledger = {'2026-09-14/korea': {'status': 'sent'}}
         for hour, mode in ((6, 'global'), (18, 'korea')):
-            target, actual, key = schedule.choose_slot(at(hour - 3), {})
+            if mode == 'korea':
+                ledger['2026-09-15/global'] = {'status': 'sent'}
+            target, actual, key = schedule.choose_slot(at(hour - 3), ledger)
             self.assertEqual((target, actual), (at(hour), mode))
-            self.assertIsNone(schedule.choose_slot(at(hour), {key: {'status': 'sent'}}))
-            self.assertIsNone(schedule.choose_slot(at(hour), {key: {'status': 'sending'}}))
+            self.assertIsNone(schedule.choose_slot(at(hour), {**ledger, key: {'status': 'sent'}}))
+            self.assertIsNone(schedule.choose_slot(at(hour), {**ledger, key: {'status': 'sending'}}))
         self.assertEqual(schedule.choose_slot(at(15), {'2026-09-15/global': {}})[1], 'korea')
 
-    def test_outside_windows_and_next_day(self):
-        for now in (at(2, 59), at(6, 31), at(14, 59), at(18, 31), at(0)):
-            self.assertIsNone(schedule.choose_slot(now, {}))
+    def test_catches_up_actual_delayed_runs(self):
+        for now, mode in ((at(7, 37), 'global'), (at(8, 59), 'global'),
+                          (at(22, 14), 'korea'), (at(0), 'korea')):
+            self.assertEqual(schedule.choose_slot(now, {})[1], mode)
         self.assertIsNotNone(schedule.choose_slot(at(6, day=16), {'2026-09-15/global': {}}))
         self.assertIsNotNone(schedule.choose_slot(at(6, 30), {}))
+
+    def test_midnight_catchup_preserves_previous_date(self):
+        self.assertEqual(schedule.choose_slot(at(0), {})[2], '2026-09-14/korea')
+        self.assertIsNone(schedule.choose_slot(at(2, 59), {'2026-09-14/korea': {'status': 'sent'}}))
+
+    def test_expired_slots_are_replaced_by_next_report(self):
+        self.assertEqual(schedule.choose_slot(at(18), {})[2], '2026-09-15/korea')
+        self.assertEqual(schedule.choose_slot(at(6), {})[2], '2026-09-15/global')
+
+    def test_pending_report_precedes_future_report(self):
+        self.assertEqual(schedule.choose_slot(at(15), {})[1], 'global')
+        self.assertEqual(schedule.choose_slot(at(15), {'2026-09-15/global': {'status': 'sent'}})[1], 'korea')
+
+    def test_uncertain_morning_does_not_block_evening(self):
+        ledger = {'2026-09-15/global': {'status': 'sending'}}
+        self.assertEqual(schedule.choose_slot(at(18), ledger)[1], 'korea')
+
+    def test_naive_time_is_rejected(self):
+        with self.assertRaises(ValueError):
+            schedule.choose_slot(datetime(2026, 9, 15), {})
 
     def test_wait_stops_at_target_with_bounded_sleeps(self):
         current = [at(3)]
@@ -77,8 +101,17 @@ class ScheduleTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             schedule.deliver_slot(at(6), 'global', 'key', {},
                 prepare_fn=lambda mode: 'report', send_fn=send,
-                now_fn=lambda: at(6, 31), wait_fn=Mock(), persist_fn=Mock())
+                now_fn=lambda: at(18), wait_fn=Mock(), persist_fn=Mock())
         send.assert_not_called()
+
+    def test_late_report_is_actually_delivered(self):
+        send = Mock()
+        state = {}
+        schedule.deliver_slot(at(6), 'global', 'key', state,
+            prepare_fn=lambda mode: 'report', send_fn=send,
+            now_fn=lambda: at(7, 37), wait_fn=Mock(), persist_fn=Mock())
+        send.assert_called_once_with('report')
+        self.assertEqual(state['key']['status'], 'sent')
 
     def test_workflow_respects_runner_budget_and_current_ledger(self):
         import yaml
@@ -87,7 +120,7 @@ class ScheduleTests(unittest.TestCase):
         job = config['jobs']['report']
         self.assertEqual(job['steps'][0]['with']['ref'], 'master')
         self.assertGreater(int(job['timeout-minutes']), schedule.EARLY.total_seconds() / 60 + 10)
-        self.assertEqual(config['on']['schedule'][0]['cron'], '7,27,47 18-21,6-9 * * *')
+        self.assertEqual(config['on']['schedule'][0]['cron'], '7,27,47 * * * *')
 
 if __name__ == '__main__':
     unittest.main()

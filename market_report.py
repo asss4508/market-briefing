@@ -455,6 +455,8 @@ def send_telegram(message):
         }
         res = requests.post(url, json=payload, timeout=10)
         res.raise_for_status()
+        if res.json().get('ok') is not True:
+            raise RuntimeError('Telegram did not confirm report delivery')
     print(f"전송 완료 ({len(chunks)}개 메시지)")
 
 
